@@ -605,6 +605,37 @@ javascript: (function gpa() {
     cal.calculateGPA();
     cal.formatCoursesTableAndCreateResultTable();
 
+    function getLiveScoreValue(a) {
+        if (typeof a === 'string') {
+            let match = a.match(/data-id=["'](\d+)["']/);
+            if (match && match[1]) {
+                let id = match[1];
+                let liveInput = $('#tbDiemThiGK input.gpa-score-input[data-id="' + id + '"]');
+                if (liveInput.length) {
+                    let val = liveInput.val().trim().replace(',', '.');
+                    let num = parseFloat(val);
+                    return !isNaN(num) ? num : 0;
+                }
+            }
+            let valMatch = a.match(/value=["']([^"']*)["']/);
+            if (valMatch && valMatch[1]) {
+                let num = parseFloat(valMatch[1].replace(',', '.'));
+                if (!isNaN(num)) return num;
+            }
+        }
+        return parseFloat(a) || 0;
+    }
+
+    // Custom DataTables 1.9 Numeric Sorter for Score Inputs (Reads Live DOM)
+    try {
+        $.fn.dataTableExt.oSort['gpa-score-asc'] = function (a, b) {
+            return getLiveScoreValue(a) - getLiveScoreValue(b);
+        };
+        $.fn.dataTableExt.oSort['gpa-score-desc'] = function (a, b) {
+            return getLiveScoreValue(b) - getLiveScoreValue(a);
+        };
+    } catch (e) { }
+
     // Safe DataTables destruction compatible with legacy DataTables 1.9 used by HCMUS Portal
     try {
         tab.dataTable().fnDestroy();
@@ -616,7 +647,9 @@ javascript: (function gpa() {
         "bAutoWidth": false,
         "aaSorting": [[1, "asc"]],
         "aoColumnDefs": [
-            { "sWidth": '50%', "aTargets": [2] }
+            { "sWidth": '50%', "aTargets": [2] },
+            { "sType": "gpa-score", "aTargets": [6, 8] },
+            { "sType": "numeric", "aTargets": [3] }
         ]
     });
     tab.css({ 'width': '100%', 'margin': '0' });

@@ -35,8 +35,8 @@ body {
 
 .main-card {
     background: var(--surface);
-    border: 3px solid var(--primary);
-    box-shadow: 8px 8px 0px var(--primary);
+    border: 3px solid var(--primary); /* BOLD BORDER */
+    box-shadow: none; /* NO SHADOW */
     max-width: 600px;
     width: 100%;
     padding: 24px 28px;
@@ -120,7 +120,7 @@ body {
     text-decoration: none;
     cursor: grab;
     border: 2px solid var(--primary);
-    box-shadow: 4px 4px 0px #0f172a;
+    box-shadow: none; /* NO SHADOW */
     transition: all 0.12s ease;
     user-select: none;
     -webkit-user-drag: element;
@@ -129,14 +129,12 @@ body {
 .bm-btn:hover {
     background: var(--accent);
     border-color: var(--accent);
-    box-shadow: 5px 5px 0px var(--primary);
-    transform: translate(-1px, -1px);
+    transform: translateY(-1px);
 }
 
 .bm-btn:active {
     cursor: grabbing;
-    transform: translate(2px, 2px);
-    box-shadow: 2px 2px 0px var(--primary);
+    transform: translateY(1px);
 }
 
 .bm-icon {
@@ -151,7 +149,7 @@ body {
 .steps-container {
     display: flex;
     flex-direction: column;
-    gap: 5px;
+    gap: 4px;
 }
 
 .notice-text {
@@ -168,9 +166,9 @@ body {
     display: flex;
     align-items: center;
     gap: 12px;
-    background: #f8fafc;
-    border: 1px solid var(--border);
-    padding: 6px 12px;
+    background: transparent; /* NO BACKGROUND */
+    border: none; /* NO BORDER */
+    padding: 4px 0;
     font-size: 13px;
 }
 
@@ -230,6 +228,7 @@ body {
 
 .link-btn.danger:hover {
     background: var(--red);
+    color: #ffffff;
     border-color: var(--red);
 }
 
