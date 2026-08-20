@@ -42,6 +42,20 @@ javascript: (function gpa() {
         return yearVal === "0" || yearInput.includes("Tất cả") || yearInput.includes("tất cả");
     }
 
+    function isCourseInSemesterGpaScope(item) {
+        if (!item || !item.credit || item.credit <= 0) return false;
+        if (item.whyExclude && item.whyExclude.includes("không tính")) return false;
+        if (item.whyExclude && item.whyExclude.includes("không tín chỉ")) return false;
+        return true;
+    }
+
+    function autoResizeTextarea(el) {
+        if (!el) return;
+        el.style.height = 'auto';
+        let newHeight = Math.max(26, el.scrollHeight);
+        el.style.height = newHeight + 'px';
+    }
+
     function getSemesterData() {
         let semMap = {};
         data.forEach(item => {
@@ -253,6 +267,16 @@ javascript: (function gpa() {
             const isAbsent = rawScoreText === "Vắng" || rawScoreText.toLowerCase().includes("vắng");
             const isNoScore = (isNaN(parsedScore) && !isAbsent) || rawScoreText === "" || rawScoreText === "-";
 
+            window._gpaOriginalScoresMap = window._gpaOriginalScoresMap || {};
+            let originalScore = window._gpaOriginalScoresMap[i + 1];
+            if (originalScore === undefined) {
+                originalScore = (!isNoScore && !isAbsent && !isNaN(parsedScore)) ? parsedScore : null;
+                window._gpaOriginalScoresMap[i + 1] = originalScore;
+            }
+
+            let wasNoScore = originalScore === null;
+            let isEdited = (!wasNoScore && originalScore !== null && !isNaN(parsedScore) && parsedScore !== originalScore);
+
             let row = {
                 id: i + 1,
                 semester: $(tds[0]).text().trim().normalize(),
@@ -261,11 +285,14 @@ javascript: (function gpa() {
                 class: $(tds[3]).text().trim().normalize(),
                 ldcode: $(tds[4]).text().trim().normalize(),
                 score: !isNaN(parsedScore) ? parsedScore : 0,
+                originalScore: originalScore,
                 note: $(tds[6]).text().trim().normalize(),
                 include: true,
                 whyExclude: "",
                 isAbsent: isAbsent,
                 isNoScore: isNoScore,
+                wasNoScore: wasNoScore,
+                isEdited: isEdited,
                 letter: "",
                 fourRounding: 0,
                 isCustom: false
@@ -301,6 +328,14 @@ javascript: (function gpa() {
                 if (data[j].course === row.course) {
                     data[j].include = false;
                     data[j].whyExclude = "Đã học lại. ";
+                }
+            }
+
+            let cbEl = $(rows[i]).find(".gpa-checkbox input[type='checkbox']");
+            if (cbEl.length > 0) {
+                row.include = cbEl.is(":checked");
+                if (!row.include && !row.whyExclude) {
+                    row.whyExclude = "Người dùng bỏ chọn. ";
                 }
             }
 
@@ -393,10 +428,17 @@ javascript: (function gpa() {
             let scoreTd = $(this).find("td").not(".gpa-checkbox").eq(5);
             if (!scoreTd.find(".gpa-score-input").length) {
                 let valStr = (item.score > 0 || (!item.isAbsent && !item.isNoScore)) ? item.score : "";
+                let inputStyle = "width: 45px; text-align: center; border: 1px solid #c0c0c0; background: #ffffff; padding: 1px 2px;";
+                if (item.wasNoScore && item.score > 0) {
+                    inputStyle += " color: blue;";
+                } else {
+                    inputStyle += " color: inherit;";
+                }
+
                 scoreTd.css({ 'text-align': 'center' });
                 scoreTd.html(
                     '<div hidden>' + item.score + '</div>' +
-                    '<input type="text" class="gpa-score-input" data-id="' + item.id + '" value="' + valStr + '" placeholder="-" title="Nhập/sửa điểm" style="width: 45px; text-align: center; border: 1px solid #c0c0c0; background: #ffffff; color: inherit; font-family: inherit; font-size: inherit; padding: 1px 2px;" />'
+                    '<input type="text" class="gpa-score-input" data-id="' + item.id + '" value="' + valStr + '" placeholder="-" title="Nhập/sửa điểm" style="' + inputStyle + '" />'
                 );
             }
         });
@@ -424,6 +466,10 @@ javascript: (function gpa() {
                 '<td class="left" style="vertical-align: middle;"><div style="display:flex; align-items:center; justify-content:space-between; width:100%; box-sizing:border-box;"><span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">Môn dự kiến</span><button type="button" class="gpa-btn-del-custom" data-custom-id="' + item.id + '" title="Xóa môn dự kiến" style="background:#ef4444; color:#fff; border:none; border-radius:3px; padding:2px 6px; cursor:pointer; font-size:11px; margin-left:6px; flex-shrink:0;">Xóa</button></div></td>' +
                 '</tr>';
             tab.find('tbody').append(trHtml);
+        });
+
+        tab.find('.gpa-custom-name-input').each(function () {
+            autoResizeTextarea(this);
         });
     }
 
@@ -510,7 +556,8 @@ javascript: (function gpa() {
         }
 
         updateTargetPlanner() {
-            if (!isAllSemestersMode()) return;
+            let resBox = $('#targetGpaResult');
+            if (!resBox.length) return;
 
             let customGpaVal = $('#targetCustomGpaInput').val() ? $('#targetCustomGpaInput').val().trim().replace(',', '.') : "";
             let parsedCustom = parseFloat(customGpaVal);
@@ -523,33 +570,66 @@ javascript: (function gpa() {
                 targetName = targetGpa + " điểm";
             } else {
                 targetGpa = parseFloat($('#targetDegreeSelect').val()) || 8.0;
-                targetName = $("#targetDegreeSelect option:selected").text().split(' (')[0].trim();
-                if (!targetName.startsWith("bằng") && !targetName.startsWith("Bằng")) {
+                let selText = $("#targetDegreeSelect option:selected").text();
+                targetName = selText.split(' (')[0].trim();
+                if (!targetName.startsWith("bằng") && !targetName.startsWith("Bằng") && isAllSemestersMode()) {
                     targetName = "bằng " + targetName;
                 }
             }
 
-            let targetCredits = parseInt($('#targetCreditsInput').val()) || 138;
-            let remCredits = targetCredits - this.totalCredits;
-            let resBox = $('#targetGpaResult');
+            if (isAllSemestersMode()) {
+                let targetCredits = parseInt($('#targetCreditsInput').val()) || 138;
+                let remCredits = targetCredits - this.totalCredits;
 
-            if (!resBox.length) return;
+                if (remCredits <= 0) {
+                    resBox.html('Bạn đã tích lũy đủ ' + this.totalCredits + '/' + targetCredits + ' tín chỉ tốt nghiệp.');
+                    return;
+                }
 
-            if (remCredits <= 0) {
-                resBox.html('Bạn đã tích lũy đủ ' + this.totalCredits + '/' + targetCredits + ' tín chỉ tốt nghiệp.');
-                return;
-            }
+                let reqTotalScore = targetCredits * targetGpa;
+                let reqRemScore = reqTotalScore - this.totalScores;
+                let reqAvgScore = reqRemScore / remCredits;
 
-            let reqTotalScore = targetCredits * targetGpa;
-            let reqRemScore = reqTotalScore - this.totalScores;
-            let reqAvgScore = reqRemScore / remCredits;
-
-            if (reqAvgScore > 10.0) {
-                resBox.html('Cần trung bình ' + toFixed(reqAvgScore) + ' điểm/môn cho ' + remCredits + ' TC còn lại (Vượt quá 10.0 - Không đủ khả năng đạt ' + targetName + ').');
-            } else if (reqAvgScore <= 0) {
-                resBox.html('Bạn đã đủ điểm đạt ' + targetName + '! Chỉ cần thi qua môn cho ' + remCredits + ' TC còn lại.');
+                if (reqAvgScore > 10.0) {
+                    resBox.html('Cần trung bình ' + toFixed(reqAvgScore) + ' điểm/môn cho ' + remCredits + ' TC còn lại (Vượt quá 10.0 - Không đủ khả năng đạt ' + targetName + ').');
+                } else if (reqAvgScore <= 0) {
+                    resBox.html('Bạn đã đủ điểm đạt ' + targetName + '! Chỉ cần thi qua môn cho ' + remCredits + ' TC còn lại.');
+                } else {
+                    resBox.html('Để đạt ' + targetName + ', trung bình ' + remCredits + ' TC còn lại bạn cần đạt tối thiểu ' + toFixed(reqAvgScore) + ' điểm/môn.');
+                }
             } else {
-                resBox.html('Để đạt ' + targetName + ', trung bình ' + remCredits + ' TC còn lại bạn cần đạt tối thiểu ' + toFixed(reqAvgScore) + ' điểm/môn.');
+                let totalSemCredits = 0;
+                let completedSemCredits = 0;
+                let completedSemScores = 0;
+
+                data.forEach(item => {
+                    if (!isCourseInSemesterGpaScope(item)) return;
+                    totalSemCredits += item.credit;
+                    if (item.score > 0 || (!item.isAbsent && !item.isNoScore)) {
+                        completedSemCredits += item.credit;
+                        completedSemScores += item.credit * item.score;
+                    }
+                });
+
+                let remSemCredits = totalSemCredits - completedSemCredits;
+
+                if (remSemCredits <= 0) {
+                    let semGpa = totalSemCredits > 0 ? completedSemScores / totalSemCredits : 0;
+                    resBox.html('Tất cả môn trong học kỳ này đã có điểm (GPA học kỳ: ' + toFixed(semGpa) + ').');
+                    return;
+                }
+
+                let reqTotalSemScore = totalSemCredits * targetGpa;
+                let reqRemSemScore = reqTotalSemScore - completedSemScores;
+                let reqAvgSemScore = reqRemSemScore / remSemCredits;
+
+                if (reqAvgSemScore > 10.0) {
+                    resBox.html('Cần trung bình ' + toFixed(reqAvgSemScore) + ' điểm/môn cho ' + remSemCredits + ' TC chưa có điểm (Vượt quá 10.0 - Không đủ khả năng đạt GPA học kỳ ' + targetName + ').');
+                } else if (reqAvgSemScore <= 0) {
+                    resBox.html('Bạn đã đủ điểm đạt GPA học kỳ ' + targetName + '! Chỉ cần thi qua môn cho ' + remSemCredits + ' TC chưa có điểm còn lại.');
+                } else {
+                    resBox.html('Để đạt GPA học kỳ ' + targetName + ', trung bình ' + remSemCredits + ' TC chưa có điểm còn lại bạn cần đạt tối thiểu ' + toFixed(reqAvgSemScore) + ' điểm/môn.');
+                }
             }
         }
 
@@ -572,11 +652,6 @@ javascript: (function gpa() {
 
             let parentDiv = $("#lich-thi-dkhp")[0] || $("#aspnetForm")[0];
 
-            // Preserve user target inputs if already entered
-            let currentTargetCredits = $('#targetCreditsInput').val() || "138";
-            let currentTargetDegree = $('#targetDegreeSelect').val() || "8.0";
-            let currentCustomGpa = $('#targetCustomGpaInput').val() || "";
-
             $("#tbGPA").remove();
 
             let degInfo = getDegreeInfo(this.gpa);
@@ -586,9 +661,13 @@ javascript: (function gpa() {
                 badgeText += ' <span style="font-weight:normal;">(Còn thiếu <b>' + diff + '</b> GPA để đạt ' + degInfo.nextName + ')</span>';
             }
 
-            let showTargetPlanner = isAllSemestersMode();
+            let currentTargetDegree = $('#targetDegreeSelect').val() || "8.0";
+            let currentCustomGpa = $('#targetCustomGpaInput').val() || "";
             let targetSectionHtml = '';
-            if (showTargetPlanner) {
+            let noteTextHtml = '';
+
+            if (isAllSemestersMode()) {
+                let currentTargetCredits = $('#targetCreditsInput').val() || "138";
                 targetSectionHtml = '<div id="targetGpaSection" style="margin-top: 15px; margin-bottom: 15px; padding: 12px 0; border-top: 1px solid #dce4ec; border-bottom: 1px solid #dce4ec; font-size: 14px; line-height: 1.6;">' +
                     '<div style="font-weight: bold; margin-bottom: 8px; color: #1b486a;">Ước lượng GPA mục tiêu tốt nghiệp:</div>' +
                     '<div style="display: flex; gap: 20px; align-items: center; flex-wrap: wrap; margin-bottom: 8px;">' +
@@ -605,9 +684,27 @@ javascript: (function gpa() {
                     '</div>' +
                     '<div id="targetGpaResult" style="margin-top: 6px; font-weight: bold;"></div>' +
                     '</div>';
+            } else {
+                let semTotalCredits = 0;
+                data.forEach(item => { if (isCourseInSemesterGpaScope(item)) semTotalCredits += item.credit; });
+                targetSectionHtml = '<div id="targetGpaSection" style="margin-top: 15px; margin-bottom: 15px; padding: 12px 0; border-top: 1px solid #dce4ec; border-bottom: 1px solid #dce4ec; font-size: 14px; line-height: 1.6;">' +
+                    '<div style="font-weight: bold; margin-bottom: 8px; color: #1b486a;">Ước lượng GPA mục tiêu học kỳ (' + semTotalCredits + ' TC):</div>' +
+                    '<div style="display: flex; gap: 20px; align-items: center; flex-wrap: wrap; margin-bottom: 8px;">' +
+                    '<label>Mục tiêu học kỳ: ' +
+                    '<select id="targetDegreeSelect" style="border: 1px solid #c0c0c0; padding: 2px 4px;">' +
+                    '<option value="9.0"' + (currentTargetDegree === "9.0" ? " selected" : "") + '>Xuất Sắc (&gt;= 9.0)</option>' +
+                    '<option value="8.0"' + (currentTargetDegree === "8.0" ? " selected" : "") + '>Giỏi (&gt;= 8.0)</option>' +
+                    '<option value="6.5"' + (currentTargetDegree === "6.5" ? " selected" : "") + '>Khá (&gt;= 6.5)</option>' +
+                    '<option value="5.0"' + (currentTargetDegree === "5.0" ? " selected" : "") + '>Trung Bình (&gt;= 5.0)</option>' +
+                    '</select>' +
+                    '</label>' +
+                    '<label>Hoặc GPA mục tiêu cụ thể: <input type="text" id="targetCustomGpaInput" value="' + currentCustomGpa + '" placeholder="Vd: 9.5" style="width: 60px; text-align: center; border: 1px solid #c0c0c0; padding: 2px 4px;" /></label>' +
+                    '</div>' +
+                    '<div id="targetGpaResult" style="margin-top: 6px; font-weight: bold;"></div>' +
+                    '</div>';
             }
 
-            let gpaFieldSet = $('<fieldset id="tbGPA"><legend>Thống kê GPA & Dự đoán tốt nghiệp</legend><div id="tbGPA_wrapper" class="dataTables_wrapper" role="grid"><table id="tbGPA_table" class="dkhp-table dataTable"><thead></thead><tbody role="alert" aria-live="polite" aria-relevant="all"></tbody></table></div>' + targetSectionHtml + '<p style="margin-top: 10px; color: blue;"><strong>(*)</strong>: Nhấn Ctrl+Shift+I và chọn tab Console để xem chi tiết tính toán.<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Ước lượng GPA mục tiêu tốt nghiệp & biểu đồ biến thiên GPA chỉ hiển thị khi tra cứu ở chế độ Tất cả năm học.<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Nếu bạn thấy hữu ích, hãy tặng cho tác giả gốc một Star <a href="https://github.com/dtrung98/GPABookmarklet" target="_blank">Tại Đây</a> hoặc <a href="https://github.com/DreamyWanderer/GPABookmarklet_Maintanence" target="_blank">Tại Đây</a> (hoặc tác giả version mới <a href="https://github.com/dorayakiiiiz/GPABookmarklet" target="_blank">Tại Đây</a>) nhé</p></fieldset>');
+            let gpaFieldSet = $('<fieldset id="tbGPA"><legend>Thống kê GPA & Ước lượng mục tiêu</legend><div id="tbGPA_wrapper" class="dataTables_wrapper" role="grid"><table id="tbGPA_table" class="dkhp-table dataTable"><thead></thead><tbody role="alert" aria-live="polite" aria-relevant="all"></tbody></table></div>' + targetSectionHtml + '<p style="margin-top: 10px; color: blue;"><strong>(*)</strong>: Nhấn Ctrl+Shift+I và chọn tab Console để xem chi tiết tính toán.<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Biểu đồ biến thiên GPA chỉ hiển thị khi tra cứu ở chế độ Tất cả năm học.<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Nếu bạn thấy hữu ích, hãy tặng cho tác giả gốc một Star <a href="https://github.com/dtrung98/GPABookmarklet" target="_blank">Tại Đây</a> hoặc <a href="https://github.com/DreamyWanderer/GPABookmarklet_Maintanence" target="_blank">Tại Đây</a> (hoặc tác giả version mới <a href="https://github.com/dorayakiiiiz/GPABookmarklet" target="_blank">Tại Đây</a>) nhé</p></fieldset>');
 
             let gpaTableHead = $(gpaFieldSet).find("thead")[0];
             let gpaTableBody = $(gpaFieldSet).find("tbody")[0];
@@ -640,7 +737,7 @@ javascript: (function gpa() {
             if (isAllSemestersMode()) {
                 let semData = getSemesterData();
                 if (semData.length > 0) {
-                    let chartFieldSet = $('<fieldset id="gpaChartFieldSet" style="margin-top: 15px;"><legend>📈 Biểu đồ biến thiên GPA qua các học kỳ</legend>' +
+                    let chartFieldSet = $('<fieldset id="gpaChartFieldSet" style="margin-top: 15px;"><legend>Biểu đồ biến thiên GPA qua các học kỳ</legend>' +
                         '<div style="display: flex; justify-content: flex-end; gap: 20px; font-size: 12px; margin-bottom: 10px; font-weight: bold; padding: 0 10px;">' +
                         '<span style="color: #0284c7; display: flex; align-items: center; gap: 4px;"><span style="display:inline-block; width:10px; height:10px; background:#0284c7; border-radius:50%;"></span> GPA Học Kỳ</span>' +
                         '<span style="color: #059669; display: flex; align-items: center; gap: 4px;"><span style="display:inline-block; width:10px; height:10px; background:#059669; border-radius:50%;"></span> GPA Tích Lũy</span>' +
@@ -661,28 +758,35 @@ javascript: (function gpa() {
                 }
             }
 
-            if (showTargetPlanner) {
-                this.updateTargetPlanner();
-            }
+            this.updateTargetPlanner();
 
             for (let i = 0; i < rows.length; i++) {
                 let id = parseInt($(rows[i]).attr("id"));
                 let item = data[id - 1];
                 if (!item) continue;
 
+                let rowEl = $(rows[i]);
+                let childEls = rowEl.find('td, a, input, textarea');
+
                 if (!item.include) {
-                    if (item.whyExclude.includes("không tính"))
-                        $(rows[i]).attr("style", "color:blue;text-decoration: line-through;");
-                    else if (item.whyExclude === "")
-                        $(rows[i]).attr("style", "color:grey;text-decoration: line-through;");
-                    else
-                        $(rows[i]).attr("style", "color:red;text-decoration: line-through;");
-                } else {
-                    if (item.whyExclude === "") {
-                        $(rows[i]).removeAttr("style");
+                    if (item.whyExclude.includes("không tính")) {
+                        rowEl.css({ "color": "blue", "text-decoration": "line-through" });
+                        childEls.css({ "color": "blue", "text-decoration": "line-through" });
+                    } else if (item.whyExclude === "") {
+                        rowEl.css({ "color": "grey", "text-decoration": "line-through" });
+                        childEls.css({ "color": "grey", "text-decoration": "line-through" });
                     } else {
-                        // User checked a course with exclude reason -> BLUE text, NO strikethrough! (Anh 4)
-                        $(rows[i]).attr("style", "color:blue;text-decoration: none;");
+                        rowEl.css({ "color": "red", "text-decoration": "line-through" });
+                        childEls.css({ "color": "red", "text-decoration": "line-through" });
+                    }
+                } else {
+                    if (item.wasNoScore || item.isEdited || item.whyExclude !== "") {
+                        // Originally unscored course OR edited score OR checked excluded course -> BLUE text (blue), NO strikethrough!
+                        rowEl.css({ "color": "blue", "text-decoration": "none" });
+                        childEls.css({ "color": "blue", "text-decoration": "none" });
+                    } else {
+                        rowEl.removeAttr("style");
+                        childEls.css({ "color": "", "text-decoration": "" });
                     }
                 }
             }
@@ -691,12 +795,13 @@ javascript: (function gpa() {
 
 
     class ExportPdf {
-        constructor(data, cal) {
-            this.data = data;
-            this.cal = cal;
-        }
+        constructor() { }
 
         exportToPdf() {
+            let exportData = data;
+            let exportCal = cal;
+            if (!exportCal) return;
+
             let rawUserText = $('#user_tools span').text() || $('#user_tools').text() || "";
             let studentName = "TRÀ VĂN SỸ";
             if (rawUserText.includes("Xin chào")) {
@@ -706,7 +811,7 @@ javascript: (function gpa() {
                 }
             }
 
-            let degInfo = getDegreeInfo(this.cal.gpa);
+            let degInfo = getDegreeInfo(exportCal.gpa);
             const now = new Date();
             const dateStr = 'Ngày ' + now.getDate() + ' tháng ' + (now.getMonth() + 1) + ' năm ' + now.getFullYear();
 
@@ -719,7 +824,7 @@ javascript: (function gpa() {
 
             let rowsHtml = '';
             let stt = 1;
-            this.data.forEach(function (row) {
+            exportData.forEach(function (row) {
                 if (row.include) {
                     let scoreVal = (row.score > 0 || (!row.isAbsent && !row.isNoScore)) ? toFixed(row.score) : "-";
                     let letterVal = row.letter || "-";
@@ -790,10 +895,10 @@ javascript: (function gpa() {
                 rowsHtml +
                 '</tbody></table>' +
                 '<table class="summary-table"><tr>' +
-                '<td style="width: 60%;"><b>Điểm trung bình tích lũy (thang 10):</b> ' + toFixed(this.cal.gpa) + '</td>' +
-                '<td style="width: 40%;"><b>Tổng số tín chỉ tích lũy:</b> ' + this.cal.totalCredits + ' tín chỉ</td>' +
+                '<td style="width: 60%;"><b>Điểm trung bình tích lũy (thang 10):</b> ' + toFixed(exportCal.gpa) + '</td>' +
+                '<td style="width: 40%;"><b>Tổng số tín chỉ tích lũy:</b> ' + exportCal.totalCredits + ' tín chỉ</td>' +
                 '</tr><tr>' +
-                '<td><b>Điểm trung bình tích lũy (thang 4):</b> ' + toFixed(this.cal.fourGPA) + '</td>' +
+                '<td><b>Điểm trung bình tích lũy (thang 4):</b> ' + toFixed(exportCal.fourGPA) + '</td>' +
                 '<td><b>Xếp loại học lực tích lũy:</b> ' + degInfo.name + '</td>' +
                 '</tr></table>' +
                 '<table class="footer-table"><tr>' +
@@ -816,26 +921,27 @@ javascript: (function gpa() {
     }
 
     class SaveCoursesList {
-        constructor(data, cal) {
-            this.data = data;
-            this.cal = cal;
-        }
+        constructor() { }
 
         saveToFileCSV() {
+            let exportData = data;
+            let exportCal = cal;
+            if (!exportCal) return;
+
             let csv = 'Tên môn học, Số tín chỉ, Điểm, Điểm chữ, Điểm 4, Học kỳ, Lớp, Ghi chú\n';
-            this.data.forEach(function (row) {
+            exportData.forEach(function (row) {
                 if (row.include) {
                     csv += row.course + ', ' + row.credit + ', ' + row.score + ', ' + row.letter + ', ' + row.fourRounding + ', ' + row.semester + ', ' + row.class + ', ' + row.note + '\n';
                 }
             });
 
-            csv += "Điểm trung bình tích lũy (GPA): " + toFixed(this.cal.gpa) + "\n";
-            csv += "Điểm trung bình tích lũy (GPA) hệ 4: " + toFixed(this.cal.fourGPA) + "\n";
-            csv += "Điểm trung bình học tập: " + toFixed(this.cal.notPassGPA) + "\n";
-            csv += "Số tín chỉ tích lũy: " + this.cal.totalCredits + "\n";
-            csv += "Tổng điểm tích lũy: " + toFixed(this.cal.totalScores) + "\n";
-            csv += "Tổng học phần: " + this.data.length + "\n";
-            csv += "Tổng học phần trong GPA: " + (this.data.length - this.cal.removedCoursesSize) + "\n";
+            csv += "Điểm trung bình tích lũy (GPA): " + toFixed(exportCal.gpa) + "\n";
+            csv += "Điểm trung bình tích lũy (GPA) hệ 4: " + toFixed(exportCal.fourGPA) + "\n";
+            csv += "Điểm trung bình học tập: " + toFixed(exportCal.notPassGPA) + "\n";
+            csv += "Số tín chỉ tích lũy: " + exportCal.totalCredits + "\n";
+            csv += "Tổng điểm tích lũy: " + toFixed(exportCal.totalScores) + "\n";
+            csv += "Tổng học phần: " + exportData.length + "\n";
+            csv += "Tổng học phần trong GPA: " + (exportData.length - exportCal.removedCoursesSize) + "\n";
 
             let hiddenElement = document.createElement('a');
             hiddenElement.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent('\uFEFF' + csv);
@@ -915,17 +1021,18 @@ javascript: (function gpa() {
         let courseRow = $(this).closest("tr");
         let idCourse = parseInt($(courseRow).attr("id"));
 
-        if (idCourse && data[idCourse - 1]) {
-            data[idCourse - 1].include = $(this).is(":checked");
-            $(this).siblings().first().text($(this).is(":checked") ? 1 : 0);
-
-            refreshAllDataAndUI();
+        let item = data.find(d => d.id == idCourse);
+        if (item) {
+            item.include = $(this).is(":checked");
         }
+        $(this).siblings().first().text($(this).is(":checked") ? 1 : 0);
+
+        refreshAllDataAndUI();
     });
 
-    // Prevent Enter key in score input from submitting ASP.NET webform and reloading page!
-    $('#tbDiemThiGK').off('keydown', '.gpa-score-input');
-    $('#tbDiemThiGK').on('keydown', '.gpa-score-input', function (e) {
+    // Prevent Enter key in score inputs, target planner inputs, and custom inputs from submitting ASP.NET webform!
+    $(document).off('keydown', '.gpa-score-input, #targetCreditsInput, #targetCustomGpaInput, .gpa-custom-sem-input, .gpa-custom-name-input, .gpa-custom-credit-input');
+    $(document).on('keydown', '.gpa-score-input, #targetCreditsInput, #targetCustomGpaInput, .gpa-custom-sem-input, .gpa-custom-name-input, .gpa-custom-credit-input', function (e) {
         if (e.key === 'Enter' || e.keyCode === 13) {
             e.preventDefault();
             e.stopPropagation();
@@ -956,6 +1063,7 @@ javascript: (function gpa() {
             item.score = 0;
             item.include = false;
             item.isNoScore = true;
+            item.isEdited = (item.originalScore !== null);
             item.whyExclude = "Chưa hoặc không có điểm. ";
         } else {
             let newScore = parseFloat(rawVal);
@@ -963,6 +1071,7 @@ javascript: (function gpa() {
                 item.score = newScore;
                 item.isAbsent = false;
                 item.isNoScore = false;
+                item.isEdited = (item.originalScore !== null && newScore !== item.originalScore);
 
                 if (item.score >= 5) {
                     item.include = true;
@@ -971,6 +1080,12 @@ javascript: (function gpa() {
                     item.include = false;
                     item.whyExclude = "Điểm nhỏ hơn 5, chưa qua môn. ";
                 }
+            } else {
+                item.score = 0;
+                item.include = false;
+                item.isNoScore = true;
+                item.isEdited = (item.originalScore !== null);
+                item.whyExclude = "Điểm không hợp lệ (phải từ 0 đến 10). ";
             }
         }
 
@@ -1008,12 +1123,11 @@ javascript: (function gpa() {
         let idCourse = $(this).attr("data-id");
         let item = data.find(d => d.id == idCourse);
         if (item) {
-            let val = $(this).val().trim();
-            item.course = val || "-";
-            $(this).attr("title", val);
+            let val = $(this).val();
+            item.course = val ? val : "-";
+            $(this).attr("title", item.course);
         }
-        this.style.height = 'auto';
-        this.style.height = (this.scrollHeight > 26 ? this.scrollHeight : 26) + 'px';
+        autoResizeTextarea(this);
     });
 
     $('#tbDiemThiGK').off('input change', '.gpa-custom-credit-input');
@@ -1079,8 +1193,8 @@ javascript: (function gpa() {
     }
 
     if (!$('#saveCoursesList')[0]) {
-        let saveCoursesList = new SaveCoursesList(data, cal);
-        let exportPdf = new ExportPdf(data, cal);
+        let saveCoursesList = new SaveCoursesList();
+        let exportPdf = new ExportPdf();
 
         let saveButton = $('#ob_iBbtnXemDiemThiContainer').clone().attr("id", "saveCoursesList");
         $(saveButton).attr("style", "width: 22%; display: inline-block; margin-right: 10px; margin-bottom: 10px;");
@@ -1092,12 +1206,38 @@ javascript: (function gpa() {
         });
 
         let pdfButton = $('#ob_iBbtnXemDiemThiContainer').clone().attr("id", "exportPdfList");
-        $(pdfButton).attr("style", "width: 22%; display: inline-block; margin-bottom: 10px;");
+        $(pdfButton).attr("style", "width: 22%; display: inline-block; margin-right: 10px; margin-bottom: 10px;");
         $($(pdfButton).find(".ob_iBC")[0]).text("Xuất bảng điểm (PDF)");
         $(pdfButton).insertAfter(saveButton);
         $(pdfButton).click(function (event) {
             event.preventDefault();
             exportPdf.exportToPdf();
+        });
+
+        let resetButton = $('#ob_iBbtnXemDiemThiContainer').clone().attr("id", "resetGpaBookmarklet");
+        $(resetButton).attr("style", "width: 15%; display: inline-block; margin-bottom: 10px;");
+        $($(resetButton).find(".ob_iBC")[0]).text("Reset");
+        $(resetButton).insertAfter(pdfButton);
+        $(resetButton).click(function (event) {
+            event.preventDefault();
+            window._gpaOriginalScoresMap = {};
+            customCoursesList = [];
+            window._gpaCustomCoursesList = [];
+
+            tab.find('tbody tr.gpa-custom-row').remove();
+
+            $('#tbDiemThiGK tbody tr').each(function () {
+                let scoreTd = $(this).find("td").not(".gpa-checkbox").eq(5);
+                let hiddenDiv = scoreTd.find('div[hidden]');
+                if (hiddenDiv.length) {
+                    let origText = hiddenDiv.text();
+                    scoreTd.text(origText === "0" ? "-" : origText);
+                }
+                $(this).removeAttr("style");
+                $(this).find('td, a').css({ "color": "", "text-decoration": "" });
+            });
+
+            refreshAllDataAndUI();
         });
     }
 

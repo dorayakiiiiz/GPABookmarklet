@@ -78,13 +78,6 @@ Besides that, I also add some minor modifications to this bookmaklet for ~~my~~ 
 
 - <a name="thcsBug"></a> Add "Tin học cơ sở" to list of courses that must not to be included in GPA.
 
-## List of new features & improvements (v2.1.0 by dorayakiiiiz)
-
-- **Real-time What-If Score Simulation**: Allows editing/inputting test scores directly in table to preview GPA changes instantly.
-- **Degree Classification Status**: Displays current academic classification (Xuất Sắc, Giỏi, Khá, Trung Bình) and remaining GPA gap to reach next tier.
-- **Graduation Target GPA Estimator**: Calculates required average grade per course for remaining credits to achieve target degree or custom GPA (default 138 credits).
-- **A4 PDF Transcript Export**: Generates printable A4 Vietnamese academic transcript with embedded HCMUS logo, student info, and clean formatting.
-- **HCMUS Portal UI Fixes**: Fixed left navbar scroll background white gap, default display for Letter & 4.0 Grade columns, and 100% full-width table alignment.
 
 - Sometimes enabling the letter/4 grade system causes wrong format. You should re-run the GPABookmarklet to see if that can be fixed.
 
@@ -106,6 +99,14 @@ https://dreamywanderer.github.io/GPABookmarklet_Maintanence/
 ## Bugs Report and Suggestions
 
 Please go to [issues](https://github.com/DreamyWanderer/GPABookmarklet_Maintanence/issues) pages and provide those information. It will be great if you can assign them a suitable label as well!
+
+## List of new features & improvements (v2.1.0 by dorayakiiiiz)
+
+- **Real-time What-If Score Simulation**: Allows editing existing grades or inserting custom plan courses directly in table to preview GPA changes instantly.
+- **Degree Classification Status**: Displays current academic classification (Xuất Sắc, Giỏi, Khá, Trung Bình) and remaining GPA gap to reach next tier.
+- **Target GPA Estimator (Graduation & Semester)**: Calculates required average grade per course to achieve target degree/GPA for remaining graduation credits or current semester credits.
+- **Semester GPA Trend Chart**: Native HTML5 Canvas 2D chart plotting Semester GPA vs Cumulative GPA trends across all semesters.
+- **A4 PDF Transcript Export**: Generates printable A4 Vietnamese academic transcript with embedded HCMUS logo, student info, and clean formatting.
 
 ## Licenses and Derivative Works
 
