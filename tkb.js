@@ -151,7 +151,7 @@ javascript: (function tkbModule() {
             return result;
         }
 
-        // Extract all schedule items (both Lecture and selected Practical shift) for a class
+        // Extract all schedule items (Lecture, selected Practical shift, selected Exercise shift) for a class
         function getAllSchedules(item) {
             let list = parseSchedule(item.scheduleStr);
             if (item.selectedTH && item.selectedTH.scheduleStr) {
@@ -159,16 +159,21 @@ javascript: (function tkbModule() {
                 thList.forEach(s => { s.isTH = true; s.thNhom = item.selectedTH.nhom; });
                 list = list.concat(thList);
             }
+            if (item.selectedBT && item.selectedBT.scheduleStr) {
+                let btList = parseSchedule(item.selectedBT.scheduleStr);
+                btList.forEach(s => { s.isBT = true; s.btNhom = item.selectedBT.nhom; });
+                list = list.concat(btList);
+            }
             return list;
         }
 
-        // Interval overlap check function between two items (including Practical lab shifts)
+        // Interval overlap check function between two items (including Practical lab & Exercise shifts)
         function checkConflict(itemA, itemB) {
             let schedA = getAllSchedules(itemA);
             let schedB = getAllSchedules(itemB);
 
-            let hasTHA = itemA.hasTH || !!(itemA.selectedTH && itemA.selectedTH.scheduleStr);
-            let hasTHB = itemB.hasTH || !!(itemB.selectedTH && itemB.selectedTH.scheduleStr);
+            let hasSubA = itemA.hasTH || itemA.hasBT || !!(itemA.selectedTH && itemA.selectedTH.scheduleStr) || !!(itemA.selectedBT && itemA.selectedBT.scheduleStr);
+            let hasSubB = itemB.hasTH || itemB.hasBT || !!(itemB.selectedTH && itemB.selectedTH.scheduleStr) || !!(itemB.selectedBT && itemB.selectedBT.scheduleStr);
 
             for (let a of schedA) {
                 for (let b of schedB) {
@@ -176,8 +181,8 @@ javascript: (function tkbModule() {
                         let startOverlap = Math.max(a.startPeriod, b.startPeriod);
                         let endOverlap = Math.min(a.endPeriod, b.endPeriod);
                         if (startOverlap <= endOverlap) {
-                            let typeA = hasTHA ? (a.isTH ? ` [TH ${a.thNhom}]` : ' [LT]') : '';
-                            let typeB = hasTHB ? (b.isTH ? ` [TH ${b.thNhom}]` : ' [LT]') : '';
+                            let typeA = a.isTH ? ` [TH ${a.thNhom}]` : (a.isBT ? ` [BT ${a.btNhom}]` : (hasSubA ? ' [LT]' : ''));
+                            let typeB = b.isTH ? ` [TH ${b.thNhom}]` : (b.isBT ? ` [BT ${b.btNhom}]` : (hasSubB ? ' [LT]' : ''));
                             return {
                                 conflict: true,
                                 dayStr: a.dayStr,
@@ -216,32 +221,56 @@ javascript: (function tkbModule() {
             }
         }
 
-        // Show Modal Dialog for choosing a Practical Lab Shift matching Portal Fancybox & Obout styling 100%
-        function showThModal(courseName, className, thList, onConfirm, onCancel) {
-            $('#gpaThModal').remove();
+        // Fetch Exercise shifts via Portal Handler AJAX API
+        function getBaiTapShifts(lmid, callback) {
+            if (typeof window.getNhomLopMo === 'function') {
+                window.getNhomLopMo('LopBaiTap', lmid, function (data) {
+                    callback(data ? (data.LopMoBTs || []) : []);
+                });
+            } else {
+                $.ajax({
+                    type: "GET",
+                    url: 'Modules/SVDangKyHocPhan/HandlerSVDKHP.ashx',
+                    data: { method: 'LopBaiTap', lmid: lmid, dot: 1 },
+                    contentType: "application/json; charset=utf-8",
+                    dataType: "json",
+                    cache: false,
+                    success: function (result) {
+                        callback(result ? (result.LopMoBTs || []) : []);
+                    },
+                    error: function () {
+                        callback([]);
+                    }
+                });
+            }
+        }
+
+        // Show Modal Dialog for choosing a Practical or Exercise Sub-Class Shift matching Portal styling
+        function showSubClassModal(typeTitle, courseName, className, list, onConfirm, onCancel) {
+            $('#gpaSubClassModal').remove();
 
             let rowsHtml = '';
-            thList.forEach((th, idx) => {
+            list.forEach((item, idx) => {
                 let isDefault = (idx === 0) ? 'checked' : '';
                 let rowClass = (idx % 2 === 0) ? 'odd' : 'even';
                 rowsHtml += `
                 <tr class="${rowClass}">
-                    <td class="center" style="text-align:center;"><input type="radio" name="gpaThRadio" value="${idx}" ${isDefault} /></td>
-                    <td class="center sorting_1">${th.Nhom || ('#' + (idx + 1))}</td>
-                    <td class="center">${th.SiSo || 0}</td>
-                    <td class="left">${th.DaDK || 0}</td>
-                    <td class="left">${th.DiaDiem || 'Linh Trung'}</td>
-                    <td class="left">${th.LichHoc || 'Chưa có lịch'}</td>
+                    <td class="center" style="text-align:center;"><input type="radio" name="gpaSubRadio" value="${idx}" ${isDefault} /></td>
+                    <td class="center sorting_1">${item.Nhom || ('#' + (idx + 1))}</td>
+                    <td class="center">${item.SiSo || 0}</td>
+                    <td class="left">${item.DaDK || 0}</td>
+                    <td class="left">${item.DiaDiem || 'Linh Trung'}</td>
+                    <td class="left">${item.LichHoc || 'Chưa có lịch'}</td>
                 </tr>`;
             });
 
             let modalHtml = `
-            <div id="gpaThModal" style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:999999; display:flex; align-items:center; justify-content:center;">
+            <div id="gpaSubClassModal" style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:999999; display:flex; align-items:center; justify-content:center;">
                 <div style="background:#fff; border:10px solid #666; padding:15px; width:750px; max-width:95%; font-size:13px; font-family:tahoma,arial,sans-serif; box-sizing:border-box; box-shadow: 0 4px 20px rgba(0,0,0,0.3);">
                     <h1 style="font-size:18px; color:#004b8d; margin-top:0; margin-bottom:10px; font-weight:bold; border-bottom:1px solid #ccc; padding-bottom:8px;">
-                        Nhóm Thực Hành - ${courseName} (${className})
+                        ${typeTitle} - ${courseName} (${className})
                     </h1>
-                    <p style="font-size:12px; margin-bottom:10px; color:#333;">Lớp <strong>${className}</strong> có ${thList.length} ca thực hành. Vui lòng chọn 1 nhóm bên dưới:</p>
+                    <p style="font-size:12px; margin-bottom:10px; color:#333;">Lớp <strong>${className}</strong> có ${list.length} ca ${typeTitle.toLowerCase()}. Vui lòng chọn 1 nhóm bên dưới:</p>
                     <div style="max-height:260px; overflow-y:auto; margin-bottom:15px; border:1px solid #ccc;">
                         <table cellpadding="0" cellspacing="0" border="0" class="dkhp-table dataTable" style="width:100%; border-collapse:collapse;">
                             <thead>
@@ -260,13 +289,13 @@ javascript: (function tkbModule() {
                         </table>
                     </div>
                     <div style="display:flex; justify-content:flex-end; gap:10px; align-items:center;">
-                        <div id="gpaThBtnOk" class="ob_iBCN" style="width:80px; display:inline-block; cursor:pointer;">
+                        <div id="gpaSubBtnOk" class="ob_iBCN" style="width:80px; display:inline-block; cursor:pointer;">
                             <div class="ob_iBL"></div>
                             <div class="ob_iBR"></div>
                             <div class="ob_iBC"><div>Xác nhận</div></div>
                             <div class="ob_iBOv"></div>
                         </div>
-                        <div id="gpaThBtnCancel" class="ob_iBCN" style="width:70px; display:inline-block; cursor:pointer;">
+                        <div id="gpaSubBtnCancel" class="ob_iBCN" style="width:70px; display:inline-block; cursor:pointer;">
                             <div class="ob_iBL"></div>
                             <div class="ob_iBR"></div>
                             <div class="ob_iBC"><div>Hủy</div></div>
@@ -278,7 +307,7 @@ javascript: (function tkbModule() {
 
             $('body').append(modalHtml);
 
-            $('#gpaThBtnOk, #gpaThBtnCancel').on('mouseenter', function () {
+            $('#gpaSubBtnOk, #gpaSubBtnCancel').on('mouseenter', function () {
                 $(this).removeClass('ob_iBCN').addClass('ob_iBCO');
             }).on('mouseleave', function () {
                 $(this).removeClass('ob_iBCO ob_iBCP').addClass('ob_iBCN');
@@ -288,19 +317,19 @@ javascript: (function tkbModule() {
                 $(this).removeClass('ob_iBCP').addClass('ob_iBCO');
             });
 
-            $('#gpaThBtnOk').one('click', function () {
-                let selIdx = parseInt($('input[name="gpaThRadio"]:checked').val()) || 0;
-                let selectedTH = thList[selIdx];
-                $('#gpaThModal').remove();
+            $('#gpaSubBtnOk').one('click', function () {
+                let selIdx = parseInt($('input[name="gpaSubRadio"]:checked').val()) || 0;
+                let selectedItem = list[selIdx];
+                $('#gpaSubClassModal').remove();
                 onConfirm({
-                    nhom: selectedTH.Nhom || '',
-                    scheduleStr: selectedTH.LichHoc || '',
-                    diaDiem: selectedTH.DiaDiem || ''
+                    nhom: selectedItem.Nhom || '',
+                    scheduleStr: selectedItem.LichHoc || '',
+                    diaDiem: selectedItem.DiaDiem || ''
                 });
             });
 
-            $('#gpaThBtnCancel').one('click', function () {
-                $('#gpaThModal').remove();
+            $('#gpaSubBtnCancel').one('click', function () {
+                $('#gpaSubClassModal').remove();
                 onCancel();
             });
         }
@@ -753,7 +782,7 @@ javascript: (function tkbModule() {
             selectedList.forEach(item => {
                 let key = item.id || (item.code + '_' + item.className);
                 let palette = courseColorMap[key] || COURSE_PALETTES[0];
-                let hasTH = item.hasTH || !!(item.selectedTH && item.selectedTH.scheduleStr);
+                let hasSub = item.hasTH || item.hasBT || !!(item.selectedTH && item.selectedTH.scheduleStr) || !!(item.selectedBT && item.selectedBT.scheduleStr);
 
                 // 1. Lecture Schedule
                 let schedules = parseSchedule(item.scheduleStr);
@@ -764,7 +793,7 @@ javascript: (function tkbModule() {
                         let span = Math.max(1, end - start + 1);
 
                         gridMap[s.dayNum][start] = {
-                            courseName: item.courseName + (hasTH ? ' [LT]' : ''),
+                            courseName: item.courseName + (hasSub ? ' [LT]' : ''),
                             className: item.className,
                             room: s.room,
                             span: span,
@@ -786,6 +815,26 @@ javascript: (function tkbModule() {
                                 courseName: item.courseName + ' [TH]',
                                 className: item.selectedTH.nhom || item.className,
                                 room: sTH.room,
+                                span: span,
+                                palette: palette
+                            };
+                        }
+                    });
+                }
+
+                // 3. Selected Exercise Shift Schedule (if any)
+                if (item.selectedBT && item.selectedBT.scheduleStr) {
+                    let btSchedules = parseSchedule(item.selectedBT.scheduleStr);
+                    btSchedules.forEach(sBT => {
+                        if (sBT.dayNum >= 2 && sBT.dayNum <= 7) {
+                            let start = Math.max(1, Math.floor(sBT.startPeriod));
+                            let end = Math.min(10, Math.floor(sBT.endPeriod));
+                            let span = Math.max(1, end - start + 1);
+
+                            gridMap[sBT.dayNum][start] = {
+                                courseName: item.courseName + ' [BT]',
+                                className: item.selectedBT.nhom || item.className,
+                                room: sBT.room,
                                 span: span,
                                 palette: palette
                             };
@@ -865,17 +914,29 @@ javascript: (function tkbModule() {
                     diaDiem: $(tds[10]).text().trim()
                 };
 
-                // Check if this course has Practical Lab Shifts (Nhóm TH)
+                // Check if this course has Practical Lab Shifts (Nhóm TH - tds[8])
                 let thLink = $(tds[8]).find('a');
-                let lmid = '';
+                let thLmid = '';
                 if (thLink.length) {
                     let onclickAttr = thLink.attr('onclick') || '';
                     let match = /showFormDKThucHanh\s*\(\s*["']([^"']+)["']/i.exec(onclickAttr);
                     if (match) {
-                        lmid = match[1];
+                        thLmid = match[1];
                     }
                 }
-                newItem.hasTH = !!lmid;
+                newItem.hasTH = !!thLmid;
+
+                // Check if this course has Exercise Shifts (Nhóm BT - tds[9])
+                let btLink = $(tds[9]).find('a');
+                let btLmid = '';
+                if (btLink.length) {
+                    let onclickAttr = btLink.attr('onclick') || '';
+                    let match = /showFormDKBaiTap\s*\(\s*["']([^"']+)["']/i.exec(onclickAttr);
+                    if (match) {
+                        btLmid = match[1];
+                    }
+                }
+                newItem.hasBT = !!btLmid;
 
                 function processSelection(itemToSelect) {
                     // Check conflict against currently selected classes
@@ -901,23 +962,42 @@ javascript: (function tkbModule() {
                     renderTkbPanel();
                 }
 
-                if (lmid) {
-                    // Fetch TH shifts and prompt user for selection
-                    getThucHanhShifts(lmid, function (thList) {
+                function handleBtSelection(itemWithTH) {
+                    if (btLmid) {
+                        getBaiTapShifts(btLmid, function (btList) {
+                            if (btList && btList.length > 0) {
+                                showSubClassModal('Nhóm Bài Tập', itemWithTH.courseName, itemWithTH.className, btList, function (selectedBT) {
+                                    itemWithTH.selectedBT = selectedBT;
+                                    processSelection(itemWithTH);
+                                }, function () {
+                                    // User cancelled BT modal
+                                    cbEl.prop('checked', false);
+                                });
+                            } else {
+                                processSelection(itemWithTH);
+                            }
+                        });
+                    } else {
+                        processSelection(itemWithTH);
+                    }
+                }
+
+                if (thLmid) {
+                    getThucHanhShifts(thLmid, function (thList) {
                         if (thList && thList.length > 0) {
-                            showThModal(newItem.courseName, newItem.className, thList, function (selectedTH) {
+                            showSubClassModal('Nhóm Thực Hành', newItem.courseName, newItem.className, thList, function (selectedTH) {
                                 newItem.selectedTH = selectedTH;
-                                processSelection(newItem);
+                                handleBtSelection(newItem);
                             }, function () {
-                                // User cancelled modal
+                                // User cancelled TH modal
                                 cbEl.prop('checked', false);
                             });
                         } else {
-                            processSelection(newItem);
+                            handleBtSelection(newItem);
                         }
                     });
                 } else {
-                    processSelection(newItem);
+                    handleBtSelection(newItem);
                 }
             } else {
                 delete window._gpaSelectedClasses[classId];
