@@ -107,6 +107,8 @@ Please go to [issues](https://github.com/DreamyWanderer/GPABookmarklet_Maintanen
 - **Target GPA Estimator (Graduation & Semester)**: Calculates required average grade per course to achieve target degree/GPA for remaining graduation credits or current semester credits.
 - **Semester GPA Trend Chart**: Native HTML5 Canvas 2D chart plotting Semester GPA vs Cumulative GPA trends across all semesters.
 - **A4 PDF Transcript Export**: Generates printable A4 Vietnamese academic transcript with embedded HCMUS logo, student info, and clean formatting.
+- **Interactive Timetable Planner (PID=327)**: Automatic weekly timetable grid generator on "Danh Sách Lớp Mở" page featuring schedule conflict detection, practical lab shift selection modal, live course search & multi-filter by course/year/day.
+- **Per-Semester LocalStorage Persistence**: Automatically persists custom planned courses, what-if edited grades, and selected timetable class schedules per semester independently to browser LocalStorage.
 
 ## Licenses and Derivative Works
 
