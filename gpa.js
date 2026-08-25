@@ -146,22 +146,12 @@ javascript: (function gpa() {
                 let savedCustom = localStorage.getItem('gpa_saved_custom_courses');
                 let savedScores = localStorage.getItem('gpa_saved_edited_scores');
                 let { year, hk } = getSelectedYearAndHk();
-                console.log("[GPA RESTORE] Checking restorable data for scope:", year + "/" + hk, "isAllMode:", isAllSemestersMode());
-                console.log("  - savedCustom:", savedCustom);
-                console.log("  - savedScores:", savedScores);
 
                 if (savedCustom) {
                     let parsed = JSON.parse(savedCustom);
                     if (Array.isArray(parsed) && parsed.length > 0) {
-                        let hasMatch = parsed.some(c => {
-                            let match = isCustomCourseInScope(c);
-                            console.log("  - Check custom course scope: " + c.course + " (" + c.semester + ") -> inScope: " + match);
-                            return match;
-                        });
-                        if (hasMatch) {
-                            console.log("  -> Result: TRUE (Has custom courses in scope)");
-                            return true;
-                        }
+                        let hasMatch = parsed.some(c => isCustomCourseInScope(c));
+                        if (hasMatch) return true;
                     }
                 }
 
@@ -170,29 +160,22 @@ javascript: (function gpa() {
                     let keys = Object.keys(parsed);
                     if (keys.length > 0) {
                         if (isAllSemestersMode()) {
-                            console.log("  -> Result: TRUE (Has edited scores in All Semesters mode)");
                             return true;
                         } else {
                             let targetSem = (year + '/' + hk).toLowerCase();
                             let prefix = targetSem + "_";
                             let hasMatch = keys.some(k => k.toLowerCase().startsWith(prefix));
-                            console.log("  - Check edited scores prefix: " + prefix + " -> hasMatch: " + hasMatch);
-                            if (hasMatch) {
-                                console.log("  -> Result: TRUE (Has edited scores in scope)");
-                                return true;
-                            }
+                            if (hasMatch) return true;
                         }
                     }
                 }
             } catch (e) {
-                console.error("[GPA RESTORE] Error checking restorable data:", e);
+                // Ignore parsing errors silently
             }
-            console.log("  -> Result: FALSE (No restorable data in scope)");
             return false;
         }
 
         function restoreGpaSimulationData() {
-            console.log("[GPA RESTORE] restoreGpaSimulationData triggered!");
             window._gpaIsUserEditingOrRestored = true;
             try {
                 let savedCustom = localStorage.getItem('gpa_saved_custom_courses');
@@ -201,13 +184,9 @@ javascript: (function gpa() {
                     if (Array.isArray(parsed) && parsed.length > 0) {
                         let uniqueCustom = [];
                         let seen = new Set();
-                        
-                        let itemsToLoad = isAllSemestersMode() ? parsed : parsed.filter(c => {
-                            let match = isCustomCourseInScope(c);
-                            console.log("  - Loading custom course: " + c.course + " (" + c.semester + ") -> match: " + match);
-                            return match;
-                        });
-                        
+
+                        let itemsToLoad = isAllSemestersMode() ? parsed : parsed.filter(c => isCustomCourseInScope(c));
+
                         let merged = [...customCoursesList, ...itemsToLoad];
                         merged.forEach(c => {
                             let key = (c.id || '') + '_' + (c.semester || '') + '_' + (c.course || '');
@@ -216,10 +195,9 @@ javascript: (function gpa() {
                                 uniqueCustom.push(c);
                             }
                         });
-                        
+
                         window._gpaCustomCoursesList = uniqueCustom;
                         customCoursesList = uniqueCustom;
-                        console.log("  - Updated customCoursesList:", customCoursesList);
                     }
                 }
 
@@ -233,17 +211,15 @@ javascript: (function gpa() {
                         let { year, hk } = getSelectedYearAndHk();
                         let targetSem = (year + '/' + hk).toLowerCase();
                         let prefix = targetSem + "_";
-                        
+
                         Object.keys(parsed).forEach(k => {
                             if (k.toLowerCase().startsWith(prefix)) {
                                 window._gpaSavedEditedScores[k] = parsed[k];
-                                console.log("  - Restoring score for key: " + k + " -> " + parsed[k]);
                             }
                         });
                     }
                 }
 
-                console.log("  - Restored window._gpaSavedEditedScores:", window._gpaSavedEditedScores);
                 // Update DOM inputs with restored values so initUserCourseData reads them
                 $('#tbDiemThiGK tbody tr').each(function () {
                     let scoreInput = $(this).find('.gpa-score-input');
@@ -251,7 +227,6 @@ javascript: (function gpa() {
                     if (rowKey && scoreInput.length && window._gpaSavedEditedScores && window._gpaSavedEditedScores[rowKey] !== undefined) {
                         let restoredVal = window._gpaSavedEditedScores[rowKey];
                         scoreInput.val(restoredVal);
-                        console.log("  - Setting DOM score input for " + rowKey + " -> " + restoredVal);
                         let restoredNum = parseFloat(restoredVal.replace(',', '.'));
                         let courseRow = $(this);
                         let tds = courseRow.find("td").not(".gpa-checkbox");
@@ -809,6 +784,7 @@ javascript: (function gpa() {
             }
 
             calculateGPA() {
+                console.clear();
                 let howICalculated = "%c Điểm tính thế nào nhở ?%c \n\n";
                 let cssLog = ["font-size:16px", "font-size:normal"];
 

@@ -914,6 +914,15 @@ javascript: (function tkbModule() {
                     diaDiem: $(tds[10]).text().trim()
                 };
 
+                // Check max 25 credits limit
+                let currentSelectedList = Object.values(window._gpaSelectedClasses);
+                let currentTotalCredits = currentSelectedList.reduce((sum, item) => sum + (item.credit || 0), 0);
+                if (currentTotalCredits + newItem.credit > 25) {
+                    alert(`Không thể chọn môn này!\n\nSố tín chỉ đã chọn hiện tại: ${currentTotalCredits} TC.\nMôn vừa chọn (${newItem.courseName}) có ${newItem.credit} TC.\n\nNếu chọn thêm sẽ thành ${currentTotalCredits + newItem.credit} TC, vượt quá giới hạn tối đa 25 tín chỉ cho phép trong một học kỳ!`);
+                    cbEl.prop('checked', false);
+                    return;
+                }
+
                 // Check if this course has Practical Lab Shifts (Nhóm TH - tds[8])
                 let thLink = $(tds[8]).find('a');
                 let thLmid = '';
@@ -939,8 +948,16 @@ javascript: (function tkbModule() {
                 newItem.hasBT = !!btLmid;
 
                 function processSelection(itemToSelect) {
-                    // Check conflict against currently selected classes
+                    // Check max 25 credits limit
                     let selectedList = Object.values(window._gpaSelectedClasses);
+                    let totalCreds = selectedList.reduce((sum, item) => sum + (item.credit || 0), 0);
+                    if (totalCreds + (itemToSelect.credit || 0) > 25) {
+                        alert(`Không thể chọn môn này!\n\nSố tín chỉ đã chọn hiện tại: ${totalCreds} TC.\nMôn vừa chọn (${itemToSelect.courseName}) có ${itemToSelect.credit} TC.\n\nNếu chọn thêm sẽ thành ${totalCreds + itemToSelect.credit} TC, vượt quá giới hạn tối đa 25 tín chỉ cho phép trong một học kỳ!`);
+                        cbEl.prop('checked', false);
+                        return;
+                    }
+
+                    // Check conflict against currently selected classes
                     let hasConflict = false;
                     for (let existingItem of selectedList) {
                         let confRes = checkConflict(itemToSelect, existingItem);
