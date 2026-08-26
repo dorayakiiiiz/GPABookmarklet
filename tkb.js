@@ -167,7 +167,59 @@ javascript: (function tkbModule() {
             return list;
         }
 
-        // Interval overlap check function between two items (including Practical lab & Exercise shifts)
+        // Campus detection helper
+        function getCampus(s, item) {
+            let rm = (s && s.room ? s.room : '').toLowerCase();
+            if (rm.includes('cs1')) return 'cs1';
+            if (rm.includes('cs2')) return 'cs2';
+            let loc = (item && item.diaDiem ? item.diaDiem : '').trim().toUpperCase();
+            if (loc === 'NVC') return 'cs1';
+            if (loc === 'LT') return 'cs2';
+            return 'cs2';
+        }
+
+        // Convert period numbers to real-time minutes from 00:00 per campus
+        function getScheduleMinutes(s, campus) {
+            let startP = s.startPeriod;
+            let endP = s.endPeriod;
+
+            if (campus === 'cs1') {
+                // CS1 Nguyễn Văn Cừ (NVC)
+                const CS1_START = { 1: 420, 2: 470, 3: 520, 4: 580, 5: 630, 6: 680, 7: 770, 8: 820, 9: 870, 10: 930, 11: 980, 12: 1030, 13: 1080, 14: 1130, 15: 1180 };
+                const CS1_END = { 1: 470, 2: 520, 3: 570, 4: 630, 5: 680, 6: 730, 7: 820, 8: 870, 9: 920, 10: 980, 11: 1030, 12: 1080, 13: 1130, 14: 1180, 15: 1230 };
+
+                let startMin = CS1_START[Math.floor(startP)] || (420 + (startP - 1) * 50);
+                let endMin = CS1_END[Math.floor(endP)] || (470 + (endP - 1) * 50);
+                return { startMin, endMin };
+            } else {
+                // CS2 Linh Trung (LT)
+                const CS2_START = { 1: 450, 2: 500, 3: 550, 4: 610, 5: 660, 6: 760, 7: 810, 8: 860, 9: 920, 10: 970 };
+                const CS2_END = { 1: 500, 2: 550, 3: 600, 4: 660, 5: 710, 6: 810, 7: 860, 8: 910, 9: 970, 10: 1020 };
+
+                let startMin = CS2_START[Math.floor(startP)];
+                let endMin = CS2_END[Math.floor(endP)];
+
+                // Handle TH/BT ca 2.5 tiết
+                if (startP === 1 && endP === 2.5) { startMin = 450; endMin = 575; }
+                else if (startP === 3.5 && endP === 5) { startMin = 585; endMin = 710; }
+                else if (startP === 6 && endP === 7.5) { startMin = 760; endMin = 885; }
+                else if (startP === 8.5 && endP === 10) { startMin = 895; endMin = 1020; }
+                else {
+                    if (!startMin) startMin = 450 + (startP - 1) * 50;
+                    if (!endMin) endMin = 500 + (endP - 1) * 50;
+                }
+
+                return { startMin, endMin };
+            }
+        }
+
+        function minutesToHHMM(m) {
+            let hh = Math.floor(m / 60);
+            let mm = m % 60;
+            return (hh < 10 ? '0' + hh : hh) + 'g' + (mm < 10 ? '0' + mm : mm);
+        }
+
+        // Interval overlap check function between two items (real-time minute based across CS1 & CS2)
         function checkConflict(itemA, itemB) {
             let schedA = getAllSchedules(itemA);
             let schedB = getAllSchedules(itemB);
@@ -178,15 +230,32 @@ javascript: (function tkbModule() {
             for (let a of schedA) {
                 for (let b of schedB) {
                     if (a.dayNum === b.dayNum) {
-                        let startOverlap = Math.max(a.startPeriod, b.startPeriod);
-                        let endOverlap = Math.min(a.endPeriod, b.endPeriod);
-                        if (startOverlap <= endOverlap) {
+                        let campusA = getCampus(a, itemA);
+                        let campusB = getCampus(b, itemB);
+
+                        let timeA = getScheduleMinutes(a, campusA);
+                        let timeB = getScheduleMinutes(b, campusB);
+
+                        // True real-time overlap check:
+                        if (timeA.startMin < timeB.endMin && timeB.startMin < timeA.endMin) {
                             let typeA = a.isTH ? ` [TH ${a.thNhom}]` : (a.isBT ? ` [BT ${a.btNhom}]` : (hasSubA ? ' [LT]' : ''));
                             let typeB = b.isTH ? ` [TH ${b.thNhom}]` : (b.isBT ? ` [BT ${b.btNhom}]` : (hasSubB ? ' [LT]' : ''));
+
+                            let overlapPeriodStr = '';
+                            if (campusA === campusB) {
+                                let startOverlap = Math.max(a.startPeriod, b.startPeriod);
+                                let endOverlap = Math.min(a.endPeriod, b.endPeriod);
+                                overlapPeriodStr = `Tiết ${startOverlap}-${endOverlap}`;
+                            } else {
+                                let overlapStart = Math.max(timeA.startMin, timeB.startMin);
+                                let overlapEnd = Math.min(timeA.endMin, timeB.endMin);
+                                overlapPeriodStr = `${minutesToHHMM(overlapStart)}-${minutesToHHMM(overlapEnd)}`;
+                            }
+
                             return {
                                 conflict: true,
                                 dayStr: a.dayStr,
-                                overlapPeriodStr: `Tiết ${startOverlap}-${endOverlap}`,
+                                overlapPeriodStr: overlapPeriodStr,
                                 detailA: itemA.courseName + typeA,
                                 detailB: itemB.courseName + typeB
                             };
@@ -768,107 +837,229 @@ javascript: (function tkbModule() {
             $('#gpaTkbClassCount').text(selectedList.length + ' lớp học');
             $('#gpaTkbTotalCredits').text(totalCredits + ' TC');
 
-            // Build Grid Map for 10 Periods (Tiết 1-10) and Days 2-7
-            let gridMap = {};
-            let occupied = {};
-            for (let d = 2; d <= 7; d++) {
-                gridMap[d] = {};
-                occupied[d] = {};
-                for (let p = 1; p <= 10; p++) {
-                    occupied[d][p] = false;
-                }
+            // Detect if selected classes contain both CS1 and CS2
+            let campusSet = new Set();
+            selectedList.forEach(item => {
+                let scheds = getAllSchedules(item);
+                scheds.forEach(s => {
+                    campusSet.add(getCampus(s, item));
+                });
+            });
+            let isMixedCampus = campusSet.has('cs1') && campusSet.has('cs2');
+
+            // Update table header column 1 label depending on mode
+            if (isMixedCampus) {
+                $('#gpaTkbGrid thead tr th:first-child').text('Buổi').css('width', '90px');
+            } else {
+                $('#gpaTkbGrid thead tr th:first-child').text('Tiết').css('width', '50px');
             }
 
-            selectedList.forEach(item => {
-                let key = item.id || (item.code + '_' + item.className);
-                let palette = courseColorMap[key] || COURSE_PALETTES[0];
-                let hasSub = item.hasTH || item.hasBT || !!(item.selectedTH && item.selectedTH.scheduleStr) || !!(item.selectedBT && item.selectedBT.scheduleStr);
+            let tbodyHtml = '';
 
-                // 1. Lecture Schedule
-                let schedules = parseSchedule(item.scheduleStr);
-                schedules.forEach(s => {
-                    if (s.dayNum >= 2 && s.dayNum <= 7) {
-                        let start = Math.max(1, Math.floor(s.startPeriod));
-                        let end = Math.min(10, Math.floor(s.endPeriod));
-                        let span = Math.max(1, end - start + 1);
+            if (isMixedCampus) {
+                // Proposal A: Session-based Grid (Buổi Sáng / Buổi Chiều / Buổi Tối) for mixed CS1 & CS2
+                let sessionMap = {};
+                let hasEveningClass = false;
 
-                        gridMap[s.dayNum][start] = {
-                            courseName: item.courseName + (hasSub ? ' [LT]' : ''),
-                            className: item.className,
-                            room: s.room,
-                            span: span,
-                            palette: palette
-                        };
+                for (let d = 2; d <= 7; d++) {
+                    sessionMap[d] = { morning: [], afternoon: [], evening: [] };
+                }
+
+                selectedList.forEach(item => {
+                    let key = item.id || (item.code + '_' + item.className);
+                    let palette = courseColorMap[key] || COURSE_PALETTES[0];
+                    let hasSub = item.hasTH || item.hasBT || !!(item.selectedTH && item.selectedTH.scheduleStr) || !!(item.selectedBT && item.selectedBT.scheduleStr);
+
+                    function addSessionCard(s, typeTag) {
+                        if (s.dayNum < 2 || s.dayNum > 7) return;
+                        let campus = getCampus(s, item);
+                        let time = getScheduleMinutes(s, campus);
+                        let sessionKey = 'morning';
+                        if (time.startMin >= 1080) {
+                            sessionKey = 'evening';
+                            hasEveningClass = true;
+                        } else if (time.startMin >= 750) {
+                            sessionKey = 'afternoon';
+                        }
+
+                        let campusTag = campus === 'cs1' ? 'NVC' : 'LT';
+                        let periodText = `Tiết ${s.startPeriod}-${s.endPeriod}`;
+                        let timeStr = `${minutesToHHMM(time.startMin)}-${minutesToHHMM(time.endMin)}`;
+
+                        let cardHtml = `
+                        <div class="tkb-session-card" style="background: ${palette.bg}; color: ${palette.text}; vertical-align: middle; padding: 5px 4px; font-size: 14px; text-align: center; line-height: 1.35; word-wrap: break-word; overflow-wrap: break-word; word-break: break-word; margin: 3px 0; border-radius: 3px;">
+                            ${item.courseName}${typeTag}<br>
+                            (${item.className})<br>
+                            <span style="color: ${palette.roomText}; font-size: 12px;">[${campusTag}] ${s.room}</span><br>
+                            <span style="color: ${palette.text}; font-size: 12px;">${periodText} (${timeStr})</span>
+                        </div>`;
+
+                        sessionMap[s.dayNum][sessionKey].push(cardHtml);
+                    }
+
+                    // 1. Lecture
+                    let schedules = parseSchedule(item.scheduleStr);
+                    schedules.forEach(s => addSessionCard(s, hasSub ? ' [LT]' : ''));
+
+                    // 2. Practical
+                    if (item.selectedTH && item.selectedTH.scheduleStr) {
+                        let thSchedules = parseSchedule(item.selectedTH.scheduleStr);
+                        thSchedules.forEach(sTH => addSessionCard(sTH, ' [TH]'));
+                    }
+
+                    // 3. Exercise
+                    if (item.selectedBT && item.selectedBT.scheduleStr) {
+                        let btSchedules = parseSchedule(item.selectedBT.scheduleStr);
+                        btSchedules.forEach(sBT => addSessionCard(sBT, ' [BT]'));
                     }
                 });
 
-                // 2. Selected Practical Shift Schedule (if any)
-                if (item.selectedTH && item.selectedTH.scheduleStr) {
-                    let thSchedules = parseSchedule(item.selectedTH.scheduleStr);
-                    thSchedules.forEach(sTH => {
-                        if (sTH.dayNum >= 2 && sTH.dayNum <= 7) {
-                            let start = Math.max(1, Math.floor(sTH.startPeriod));
-                            let end = Math.min(10, Math.floor(sTH.endPeriod));
-                            let span = Math.max(1, end - start + 1);
-
-                            gridMap[sTH.dayNum][start] = {
-                                courseName: item.courseName + ' [TH]',
-                                className: item.selectedTH.nhom || item.className,
-                                room: sTH.room,
-                                span: span,
-                                palette: palette
-                            };
-                        }
-                    });
+                let sessions = [
+                    { key: 'morning', label: 'Buổi sáng', timeLabel: '07g00 - 12g10' },
+                    { key: 'afternoon', label: 'Buổi chiều', timeLabel: '12g40 - 18g00' }
+                ];
+                if (hasEveningClass) {
+                    sessions.push({ key: 'evening', label: 'Buổi Tối', timeLabel: '18g00 - 20g30' });
                 }
 
-                // 3. Selected Exercise Shift Schedule (if any)
-                if (item.selectedBT && item.selectedBT.scheduleStr) {
-                    let btSchedules = parseSchedule(item.selectedBT.scheduleStr);
-                    btSchedules.forEach(sBT => {
-                        if (sBT.dayNum >= 2 && sBT.dayNum <= 7) {
-                            let start = Math.max(1, Math.floor(sBT.startPeriod));
-                            let end = Math.min(10, Math.floor(sBT.endPeriod));
-                            let span = Math.max(1, end - start + 1);
-
-                            gridMap[sBT.dayNum][start] = {
-                                courseName: item.courseName + ' [BT]',
-                                className: item.selectedBT.nhom || item.className,
-                                room: sBT.room,
-                                span: span,
-                                palette: palette
-                            };
-                        }
-                    });
-                }
-            });
-
-            // Generate <tbody> HTML with rowspan
-            let tbodyHtml = '';
-            for (let p = 1; p <= 10; p++) {
-                tbodyHtml += `<tr style="height: 32px;"><td style="border: 1px solid #CCCCCC; font-weight: normal; background: #fafafa;">Tiết ${p}</td>`;
-                for (let d = 2; d <= 7; d++) {
-                    if (occupied[d][p]) {
-                        // Covered by a previous rowspan -> skip cell
-                        continue;
+                // Calculate max cards in any single cell across all sessions so all session rows have EQUAL height
+                let maxCardsAcrossAll = 1;
+                sessions.forEach(sess => {
+                    for (let d = 2; d <= 7; d++) {
+                        let count = (sessionMap[d][sess.key] || []).length;
+                        if (count > maxCardsAcrossAll) maxCardsAcrossAll = count;
                     }
+                });
 
-                    let cellData = gridMap[d][p];
-                    if (cellData) {
-                        let span = cellData.span;
-                        let palette = cellData.palette;
-                        // Mark upcoming periods as occupied
-                        for (let k = p; k < p + span && k <= 10; k++) {
-                            occupied[d][k] = true;
-                        }
-                        tbodyHtml += `<td rowspan="${span}" style="border: 1px solid #CCCCCC; background: ${palette.bg}; color: ${palette.text}; vertical-align: middle; padding: 4px; font-size: 14px; text-align: center; line-height: 1.35; word-wrap: break-word; overflow-wrap: break-word; word-break: break-word;">
-                            ${cellData.courseName}<br>(${cellData.className})<br><span style="color: ${palette.roomText}; font-size: 11.5px;">${cellData.room}</span>
+                let uniformRowHeight = Math.max(140, maxCardsAcrossAll * 88);
+
+                sessions.forEach(sess => {
+                    tbodyHtml += `<tr style="height: ${uniformRowHeight}px;">
+                        <td style="border: 1px solid #CCCCCC; background: #fafafa; vertical-align: middle; padding: 8px 4px; font-size: 14px; line-height: 1.4; text-align: center;">
+                            ${sess.label}<br><span style="font-weight: normal; font-size: 12px; color: #666;">${sess.timeLabel}</span>
                         </td>`;
-                    } else {
-                        tbodyHtml += `<td style="border: 1px solid #CCCCCC;"></td>`;
+                    for (let d = 2; d <= 7; d++) {
+                        let cards = sessionMap[d][sess.key] || [];
+                        if (cards.length > 0) {
+                            let content = cards.map(c => {
+                                if (cards.length === 1) {
+                                    return c.replace(
+                                        'style="',
+                                        'style="height: calc(100% - 6px); display: flex; flex-direction: column; justify-content: center; box-sizing: border-box; '
+                                    );
+                                }
+                                return c;
+                            }).join('');
+                            tbodyHtml += `<td style="border: 1px solid #CCCCCC; vertical-align: middle; padding: 4px; height: ${uniformRowHeight}px;">${content}</td>`;
+                        } else {
+                            tbodyHtml += `<td style="border: 1px solid #CCCCCC;"></td>`;
+                        }
+                    }
+                    tbodyHtml += `</tr>`;
+                });
+
+            } else {
+                // Standard grid for single-campus selections (12 periods for full CS1/NVC, 10 periods for CS2/LT)
+                let isPureCS1 = campusSet.size === 1 && campusSet.has('cs1');
+                let maxPeriods = isPureCS1 ? 12 : 10;
+
+                let gridMap = {};
+                let occupied = {};
+                for (let d = 2; d <= 7; d++) {
+                    gridMap[d] = {};
+                    occupied[d] = {};
+                    for (let p = 1; p <= maxPeriods; p++) {
+                        occupied[d][p] = false;
                     }
                 }
-                tbodyHtml += `</tr>`;
+
+                selectedList.forEach(item => {
+                    let key = item.id || (item.code + '_' + item.className);
+                    let palette = courseColorMap[key] || COURSE_PALETTES[0];
+                    let hasSub = item.hasTH || item.hasBT || !!(item.selectedTH && item.selectedTH.scheduleStr) || !!(item.selectedBT && item.selectedBT.scheduleStr);
+
+                    // 1. Lecture Schedule
+                    let schedules = parseSchedule(item.scheduleStr);
+                    schedules.forEach(s => {
+                        if (s.dayNum >= 2 && s.dayNum <= 7) {
+                            let start = Math.max(1, Math.floor(s.startPeriod));
+                            let end = Math.min(maxPeriods, Math.floor(s.endPeriod));
+                            let span = Math.max(1, end - start + 1);
+
+                            gridMap[s.dayNum][start] = {
+                                courseName: item.courseName + (hasSub ? ' [LT]' : ''),
+                                className: item.className,
+                                room: s.room,
+                                span: span,
+                                palette: palette
+                            };
+                        }
+                    });
+
+                    // 2. Practical
+                    if (item.selectedTH && item.selectedTH.scheduleStr) {
+                        let thSchedules = parseSchedule(item.selectedTH.scheduleStr);
+                        thSchedules.forEach(sTH => {
+                            if (sTH.dayNum >= 2 && sTH.dayNum <= 7) {
+                                let start = Math.max(1, Math.floor(sTH.startPeriod));
+                                let end = Math.min(maxPeriods, Math.floor(sTH.endPeriod));
+                                let span = Math.max(1, end - start + 1);
+
+                                gridMap[sTH.dayNum][start] = {
+                                    courseName: item.courseName + ' [TH]',
+                                    className: item.selectedTH.nhom || item.className,
+                                    room: sTH.room,
+                                    span: span,
+                                    palette: palette
+                                };
+                            }
+                        });
+                    }
+
+                    // 3. Exercise
+                    if (item.selectedBT && item.selectedBT.scheduleStr) {
+                        let btSchedules = parseSchedule(item.selectedBT.scheduleStr);
+                        btSchedules.forEach(sBT => {
+                            if (sBT.dayNum >= 2 && sBT.dayNum <= 7) {
+                                let start = Math.max(1, Math.floor(sBT.startPeriod));
+                                let end = Math.min(maxPeriods, Math.floor(sBT.endPeriod));
+                                let span = Math.max(1, end - start + 1);
+
+                                gridMap[sBT.dayNum][start] = {
+                                    courseName: item.courseName + ' [BT]',
+                                    className: item.selectedBT.nhom || item.className,
+                                    room: sBT.room,
+                                    span: span,
+                                    palette: palette
+                                };
+                            }
+                        });
+                    }
+                });
+
+                for (let p = 1; p <= maxPeriods; p++) {
+                    tbodyHtml += `<tr style="height: 32px;"><td style="border: 1px solid #CCCCCC; font-weight: normal; background: #fafafa;">Tiết ${p}</td>`;
+                    for (let d = 2; d <= 7; d++) {
+                        if (occupied[d][p]) {
+                            continue;
+                        }
+
+                        let cellData = gridMap[d][p];
+                        if (cellData) {
+                            let span = cellData.span;
+                            let palette = cellData.palette;
+                            for (let k = p; k < p + span && k <= maxPeriods; k++) {
+                                occupied[d][k] = true;
+                            }
+                            tbodyHtml += `<td rowspan="${span}" style="border: 1px solid #CCCCCC; background: ${palette.bg}; color: ${palette.text}; vertical-align: middle; padding: 4px; font-size: 14px; text-align: center; line-height: 1.35; word-wrap: break-word; overflow-wrap: break-word; word-break: break-word;">
+                                ${cellData.courseName}<br>(${cellData.className})<br><span style="color: ${palette.roomText}; font-size: 11.5px;">${cellData.room}</span>
+                            </td>`;
+                        } else {
+                            tbodyHtml += `<td style="border: 1px solid #CCCCCC;"></td>`;
+                        }
+                    }
+                    tbodyHtml += `</tr>`;
+                }
             }
 
             $('#gpaTkbGrid tbody').html(tbodyHtml);
