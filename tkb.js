@@ -973,89 +973,153 @@ javascript: (function tkbModule() {
                     }
                 }
 
-                selectedList.forEach(item => {
-                    let key = item.id || (item.code + '_' + item.className);
-                    let palette = courseColorMap[key] || COURSE_PALETTES[0];
-                    let hasSub = item.hasTH || item.hasBT || !!(item.selectedTH && item.selectedTH.scheduleStr) || !!(item.selectedBT && item.selectedBT.scheduleStr);
+                for (let d = 2; d <= 7; d++) {
+                    let dayItems = [];
 
-                    // 1. Lecture Schedule
-                    let schedules = parseSchedule(item.scheduleStr);
-                    schedules.forEach(s => {
-                        if (s.dayNum >= 2 && s.dayNum <= 7) {
-                            let start = Math.max(1, Math.floor(s.startPeriod));
-                            let end = Math.min(maxPeriods, Math.floor(s.endPeriod));
-                            let span = Math.max(1, end - start + 1);
+                    selectedList.forEach(item => {
+                        let key = item.id || (item.code + '_' + item.className);
+                        let palette = courseColorMap[key] || COURSE_PALETTES[0];
+                        let hasSub = item.hasTH || item.hasBT || !!(item.selectedTH && item.selectedTH.scheduleStr) || !!(item.selectedBT && item.selectedBT.scheduleStr);
 
-                            gridMap[s.dayNum][start] = {
-                                courseName: item.courseName + (hasSub ? ' [LT]' : ''),
-                                className: item.className,
-                                room: s.room,
-                                span: span,
-                                palette: palette
-                            };
+                        // 1. Lecture Schedule
+                        let schedules = parseSchedule(item.scheduleStr);
+                        schedules.forEach(s => {
+                            if (s.dayNum === d) {
+                                let start = Math.max(1, Math.floor(s.startPeriod));
+                                let end = Math.min(maxPeriods, Math.floor(s.endPeriod));
+                                dayItems.push({
+                                    start: start,
+                                    end: end,
+                                    courseName: item.courseName + (hasSub ? ' [LT]' : ''),
+                                    className: item.className,
+                                    room: s.room,
+                                    palette: palette
+                                });
+                            }
+                        });
+
+                        // 2. Practical
+                        if (item.selectedTH && item.selectedTH.scheduleStr) {
+                            let thSchedules = parseSchedule(item.selectedTH.scheduleStr);
+                            thSchedules.forEach(sTH => {
+                                if (sTH.dayNum === d) {
+                                    let start = Math.max(1, Math.floor(sTH.startPeriod));
+                                    let end = Math.min(maxPeriods, Math.floor(sTH.endPeriod));
+                                    dayItems.push({
+                                        start: start,
+                                        end: end,
+                                        courseName: item.courseName + ' [TH]',
+                                        className: item.selectedTH.nhom || item.className,
+                                        room: sTH.room,
+                                        palette: palette
+                                    });
+                                }
+                            });
+                        }
+
+                        // 3. Exercise
+                        if (item.selectedBT && item.selectedBT.scheduleStr) {
+                            let btSchedules = parseSchedule(item.selectedBT.scheduleStr);
+                            btSchedules.forEach(sBT => {
+                                if (sBT.dayNum === d) {
+                                    let start = Math.max(1, Math.floor(sBT.startPeriod));
+                                    let end = Math.min(maxPeriods, Math.floor(sBT.endPeriod));
+                                    dayItems.push({
+                                        start: start,
+                                        end: end,
+                                        courseName: item.courseName + ' [BT]',
+                                        className: item.selectedBT.nhom || item.className,
+                                        room: sBT.room,
+                                        palette: palette
+                                    });
+                                }
+                            });
                         }
                     });
 
-                    // 2. Practical
-                    if (item.selectedTH && item.selectedTH.scheduleStr) {
-                        let thSchedules = parseSchedule(item.selectedTH.scheduleStr);
-                        thSchedules.forEach(sTH => {
-                            if (sTH.dayNum >= 2 && sTH.dayNum <= 7) {
-                                let start = Math.max(1, Math.floor(sTH.startPeriod));
-                                let end = Math.min(maxPeriods, Math.floor(sTH.endPeriod));
-                                let span = Math.max(1, end - start + 1);
+                    // Sort dayItems by start period ascending
+                    dayItems.sort((a, b) => a.start - b.start);
 
-                                gridMap[sTH.dayNum][start] = {
-                                    courseName: item.courseName + ' [TH]',
-                                    className: item.selectedTH.nhom || item.className,
-                                    room: sTH.room,
-                                    span: span,
-                                    palette: palette
-                                };
+                    // Cluster overlapping items
+                    let clusters = [];
+                    dayItems.forEach(it => {
+                        let placed = false;
+                        for (let cl of clusters) {
+                            if (it.start <= cl.maxEnd && it.end >= cl.minStart) {
+                                cl.items.push(it);
+                                cl.minStart = Math.min(cl.minStart, it.start);
+                                cl.maxEnd = Math.max(cl.maxEnd, it.end);
+                                cl.span = cl.maxEnd - cl.minStart + 1;
+                                placed = true;
+                                break;
                             }
-                        });
-                    }
+                        }
+                        if (!placed) {
+                            clusters.push({
+                                minStart: it.start,
+                                maxEnd: it.end,
+                                span: it.end - it.start + 1,
+                                items: [it]
+                            });
+                        }
+                    });
 
-                    // 3. Exercise
-                    if (item.selectedBT && item.selectedBT.scheduleStr) {
-                        let btSchedules = parseSchedule(item.selectedBT.scheduleStr);
-                        btSchedules.forEach(sBT => {
-                            if (sBT.dayNum >= 2 && sBT.dayNum <= 7) {
-                                let start = Math.max(1, Math.floor(sBT.startPeriod));
-                                let end = Math.min(maxPeriods, Math.floor(sBT.endPeriod));
-                                let span = Math.max(1, end - start + 1);
+                    clusters.forEach(cl => {
+                        cl.items.forEach(it => { it.span = cl.span; });
+                        gridMap[d][cl.minStart] = cl.items;
+                    });
+                }
 
-                                gridMap[sBT.dayNum][start] = {
-                                    courseName: item.courseName + ' [BT]',
-                                    className: item.selectedBT.nhom || item.className,
-                                    room: sBT.room,
-                                    span: span,
-                                    palette: palette
-                                };
+                let uniformPeriodHeight = 32;
+                for (let d = 2; d <= 7; d++) {
+                    for (let pKey in gridMap[d]) {
+                        let items = gridMap[d][pKey];
+                        if (items && items.length > 0) {
+                            let maxSpan = Math.max(...items.map(it => it.span));
+                            let neededH = items.length === 1 ? (maxSpan * 32) : (items.length * 62 + 8);
+                            let reqH = Math.ceil(neededH / maxSpan);
+                            if (reqH > uniformPeriodHeight) {
+                                uniformPeriodHeight = reqH;
                             }
-                        });
+                        }
                     }
-                });
+                }
 
                 for (let p = 1; p <= maxPeriods; p++) {
-                    tbodyHtml += `<tr style="height: 32px;"><td style="border: 1px solid #CCCCCC; font-weight: normal; background: #fafafa;">Tiết ${p}</td>`;
+                    tbodyHtml += `<tr style="height: ${uniformPeriodHeight}px;"><td style="border: 1px solid #CCCCCC; font-weight: normal; background: #fafafa; height: ${uniformPeriodHeight}px; vertical-align: middle;">Tiết ${p}</td>`;
                     for (let d = 2; d <= 7; d++) {
                         if (occupied[d][p]) {
                             continue;
                         }
 
-                        let cellData = gridMap[d][p];
-                        if (cellData) {
-                            let span = cellData.span;
-                            let palette = cellData.palette;
-                            for (let k = p; k < p + span && k <= maxPeriods; k++) {
+                        let items = gridMap[d][p];
+                        if (items && items.length > 0) {
+                            let maxSpan = Math.max(...items.map(it => it.span));
+                            for (let k = p; k < p + maxSpan && k <= maxPeriods; k++) {
                                 occupied[d][k] = true;
                             }
-                            tbodyHtml += `<td rowspan="${span}" style="border: 1px solid #CCCCCC; background: ${palette.bg}; color: ${palette.text}; vertical-align: middle; padding: 4px; font-size: 14px; text-align: center; line-height: 1.35; word-wrap: break-word; overflow-wrap: break-word; word-break: break-word;">
-                                ${cellData.courseName}<br>(${cellData.className})<br><span style="color: ${palette.roomText}; font-size: 11.5px;">${cellData.room}</span>
-                            </td>`;
+
+                            if (items.length === 1) {
+                                let cellData = items[0];
+                                tbodyHtml += `<td rowspan="${cellData.span}" style="border: 1px solid #CCCCCC; background: ${cellData.palette.bg}; color: ${cellData.palette.text}; vertical-align: middle; padding: 4px; font-size: 14px; text-align: center; line-height: 1.35; word-wrap: break-word; overflow-wrap: break-word; word-break: break-word; height: ${cellData.span * uniformPeriodHeight}px; box-sizing: border-box;">
+                                    ${cellData.courseName}<br>(${cellData.className})<br><span style="color: ${cellData.palette.roomText}; font-size: 11.5px;">${cellData.room}</span>
+                                </td>`;
+                            } else {
+                                let innerRowsHtml = items.map((cellData, idx) => `
+                                    <div style="padding: 1px 0; line-height: 1.25;">
+                                        ${cellData.courseName}<br>(${cellData.className})<br><span style="color: ${cellData.palette.roomText}; font-size: 11px;">${cellData.room}</span>
+                                    </div>
+                                    ${idx < items.length - 1 ? `<div style="border-top: 1px dashed ${items[0].palette.text}; margin: 3px 6px; opacity: 0.45;"></div>` : ''}
+                                `).join('');
+
+                                tbodyHtml += `<td rowspan="${maxSpan}" style="border: 1px solid #CCCCCC; background: ${items[0].palette.bg}; color: ${items[0].palette.text}; vertical-align: middle; padding: 4px 3px; font-size: 12.5px; text-align: center; line-height: 1.25; word-wrap: break-word; overflow-wrap: break-word; word-break: break-word; height: ${maxSpan * uniformPeriodHeight}px; box-sizing: border-box;">
+                                    <div style="display: flex; flex-direction: column; justify-content: space-around; height: 100%; box-sizing: border-box;">
+                                        ${innerRowsHtml}
+                                    </div>
+                                </td>`;
+                            }
                         } else {
-                            tbodyHtml += `<td style="border: 1px solid #CCCCCC;"></td>`;
+                            tbodyHtml += `<td style="border: 1px solid #CCCCCC; height: ${uniformPeriodHeight}px;"></td>`;
                         }
                     }
                     tbodyHtml += `</tr>`;
@@ -1082,8 +1146,18 @@ javascript: (function tkbModule() {
             $('#gpaTkbActions').append(restoreBtnHtml);
         }
 
+        function disableTkbRestoreBtn() {
+            let btn = $('#gpaTkbBtnRestore');
+            if (btn.length && btn.css('opacity') !== '0.5') {
+                btn.css({ 'opacity': '0.5', 'cursor': 'not-allowed', 'pointer-events': 'none' })
+                    .off('click')
+                    .on('click', ev => ev.preventDefault());
+            }
+        }
+
         $(document).off('change', '.tkb-class-cb');
         $(document).on('change', '.tkb-class-cb', function () {
+            disableTkbRestoreBtn();
             let classId = $(this).attr('data-tkb-id');
             let row = $(this).closest('tr');
             let tds = row.find('td').not('.tkb-cb-cell');
@@ -1149,20 +1223,45 @@ javascript: (function tkbModule() {
                     }
 
                     // Check conflict against currently selected classes
-                    let hasConflict = false;
+                    let conflicts = [];
                     for (let existingItem of selectedList) {
                         let confRes = checkConflict(itemToSelect, existingItem);
                         if (confRes.conflict) {
-                            alert(`Cảnh báo trùng lịch học!\n\nLớp vừa chọn: "${confRes.detailA}"\nbị trùng lịch với lớp đã chọn: "${confRes.detailB}"\nvào ${confRes.dayStr} (${confRes.overlapPeriodStr}).\n\nKhông thể chọn môn này!`);
-                            hasConflict = true;
-                            break;
+                            conflicts.push({ existingItem, confRes });
                         }
                     }
 
-                    if (hasConflict) {
-                        // Block selection: uncheck checkbox & do not save item
-                        cbEl.prop('checked', false);
-                        return;
+                    if (conflicts.length > 0) {
+                        // Check if any conflicting slot already has 2 courses (adding itemToSelect would make 3 courses)
+                        let isThirdCourse = false;
+                        if (conflicts.length >= 2) {
+                            isThirdCourse = true;
+                        } else {
+                            let existingConf = conflicts[0].existingItem;
+                            for (let otherItem of selectedList) {
+                                if (otherItem.id !== existingConf.id) {
+                                    let otherCheck = checkConflict(existingConf, otherItem);
+                                    if (otherCheck.conflict) {
+                                        isThirdCourse = true;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+
+                        if (isThirdCourse) {
+                            let conf = conflicts[0];
+                            alert(`Cảnh báo trùng lịch học!\n\nLớp vừa chọn: "${conf.confRes.detailA}"\nbị trùng lịch với lớp đã chọn: "${conf.confRes.detailB}"\nvào ${conf.confRes.dayStr} (${conf.confRes.overlapPeriodStr}).\n\nKhông thể chọn môn này!`);
+                            cbEl.prop('checked', false);
+                            return;
+                        }
+
+                        let conf = conflicts[0];
+                        let isConfirmed = confirm(`Cảnh báo trùng lịch học!\n\nLớp vừa chọn: "${conf.confRes.detailA}"\nbị trùng lịch với lớp đã chọn: "${conf.confRes.detailB}"\nvào ${conf.confRes.dayStr} (${conf.confRes.overlapPeriodStr}).\n\nBạn có muốn vẫn chọn môn này không? (Dành cho các môn học nối tiếp nhau)`);
+                        if (!isConfirmed) {
+                            cbEl.prop('checked', false);
+                            return;
+                        }
                     }
 
                     window._gpaSelectedClasses[classId] = itemToSelect;

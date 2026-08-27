@@ -107,6 +107,36 @@ javascript: (function ketQuaDkhpModule() {
             return (hh < 10 ? '0' + hh : hh) + 'g' + (mm < 10 ? '0' + mm : mm);
         }
 
+        // Interval overlap check function between two items
+        function checkConflict(itemA, itemB) {
+            let schedA = parseSchedule(itemA.scheduleStr);
+            let schedB = parseSchedule(itemB.scheduleStr);
+
+            for (let a of schedA) {
+                for (let b of schedB) {
+                    if (a.dayNum === b.dayNum) {
+                        let campusA = getCampus(a, itemA);
+                        let campusB = getCampus(b, itemB);
+
+                        let timeA = getScheduleMinutes(a, campusA);
+                        let timeB = getScheduleMinutes(b, campusB);
+
+                        if (timeA.startMin < timeB.endMin && timeB.startMin < timeA.endMin) {
+                            let isSameWeek = !!(itemA.tuanBD && itemB.tuanBD && itemA.tuanBD === itemB.tuanBD);
+                            return {
+                                conflict: true,
+                                isSameWeek: isSameWeek,
+                                dayStr: a.dayStr,
+                                detailA: itemA.courseName + ' (' + itemA.className + ')',
+                                detailB: itemB.courseName + ' (' + itemB.className + ')'
+                            };
+                        }
+                    }
+                }
+            }
+            return { conflict: false };
+        }
+
         // Collect all course objects from page tables
         function collectPageCourses() {
             let courses = [];
@@ -119,6 +149,7 @@ javascript: (function ketQuaDkhpModule() {
                     let courseName = $(tds[1]).text().trim();
                     let className = $(tds[2]).text().trim();
                     let scheduleStr = $(tds[4]).text().trim();
+                    let tuanBD = tds.length >= 6 ? $(tds[5]).text().trim() : '';
 
                     if (code && courseName && scheduleStr && scheduleStr !== "Chưa có môn học được duyệt.") {
                         let id = 'approved_' + code + '_' + className;
@@ -128,6 +159,7 @@ javascript: (function ketQuaDkhpModule() {
                             courseName: courseName,
                             className: className,
                             scheduleStr: scheduleStr,
+                            tuanBD: tuanBD,
                             tableType: 'approved'
                         });
                     }
@@ -142,6 +174,7 @@ javascript: (function ketQuaDkhpModule() {
                     let courseName = $(tds[1]).text().trim();
                     let className = $(tds[2]).text().trim();
                     let scheduleStr = $(tds[5]).text().trim();
+                    let tuanBD = tds.length >= 7 ? $(tds[6]).text().trim() : '';
 
                     if (code && courseName && scheduleStr && scheduleStr !== "Sinh viên chưa đăng ký môn học.") {
                         let id = 'registered_' + code + '_' + className;
@@ -151,6 +184,7 @@ javascript: (function ketQuaDkhpModule() {
                             courseName: courseName,
                             className: className,
                             scheduleStr: scheduleStr,
+                            tuanBD: tuanBD,
                             tableType: 'registered'
                         });
                     }
@@ -166,9 +200,27 @@ javascript: (function ketQuaDkhpModule() {
 
             let courses = collectPageCourses();
 
+            // Detect real conflicts (same start week)
+            let realWarnings = [];
+            for (let i = 0; i < courses.length; i++) {
+                for (let j = i + 1; j < courses.length; j++) {
+                    let conf = checkConflict(courses[i], courses[j]);
+                    if (conf.conflict && conf.isSameWeek) {
+                        realWarnings.push(`Cảnh báo: Môn ${conf.detailA} và ${conf.detailB} bị trùng lịch học và cùng tuần bắt đầu vào ${conf.dayStr}. Sinh viên lưu ý nguy cơ trùng lịch thi!`);
+                    }
+                }
+            }
+
+            let warningHtml = '';
+            if (realWarnings.length > 0) {
+                let warningList = realWarnings.map(w => `<div style="margin-bottom: 8px;">${w}</div>`).join('');
+                warningHtml = `<div style="color: #ff3232ff; font-size: 16px; margin-bottom: 10px; line-height: 1.4;">${warningList}</div>`;
+            }
+
             let panelHtml = `
             <fieldset id="gpaTkbFieldSet" style="margin-top: 15px; margin-bottom: 15px; border: 1px solid #CCCCCC; padding: 10px 15px; background: menu;">
                 <legend>Thời khóa biểu</legend>
+                ${warningHtml}
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
                     <div id="gpaTkbSummary" style="font-size: 14px; color: #000; font-weight: normal;">
                         Tổng số: <span id="gpaTkbClassCount" style="font-weight: bold;">${courses.length} môn học</span>
@@ -266,16 +318,16 @@ javascript: (function ketQuaDkhpModule() {
                         let campusTag = campus === 'cs1' ? 'NVC' : 'LT';
                         let periodText = `Tiết ${s.startPeriod}-${s.endPeriod}`;
                         let timeStr = `${minutesToHHMM(time.startMin)}-${minutesToHHMM(time.endMin)}`;
-
-                        let cardHtml = `
-                        <div class="tkb-session-card" style="background: ${palette.bg}; color: ${palette.text}; vertical-align: middle; padding: 5px 4px; font-size: 14px; text-align: center; line-height: 1.35; word-wrap: break-word; overflow-wrap: break-word; word-break: break-word; margin: 3px 0; border-radius: 3px;">
-                            ${item.courseName}<br>
-                            (${item.className})<br>
-                            <span style="color: ${palette.roomText}; font-size: 12px;">[${campusTag}] ${s.room}</span><br>
-                            <span style="color: ${palette.text}; font-size: 12px;">${periodText} (${timeStr})</span>
-                        </div>`;
-
-                        sessionMap[s.dayNum][sessionKey].push(cardHtml);
+                        sessionMap[s.dayNum][sessionKey].push({
+                            cardHtml: `
+                            <div class="tkb-session-card" style="background: ${palette.bg}; color: ${palette.text}; vertical-align: middle; padding: 5px 4px; font-size: 14px; text-align: center; line-height: 1.35; word-wrap: break-word; overflow-wrap: break-word; word-break: break-word; margin: 3px 0; border-radius: 3px;">
+                                ${item.courseName}<br>
+                                (${item.className})<br>
+                                <span style="color: ${palette.roomText}; font-size: 12px;">[${campusTag}] ${s.room}</span><br>
+                                <span style="color: ${palette.text}; font-size: 12px;">${periodText} (${timeStr})</span>
+                            </div>`,
+                            tuanBD: item.tuanBD
+                        });
                     });
                 });
 
@@ -305,7 +357,12 @@ javascript: (function ketQuaDkhpModule() {
                     for (let d = 2; d <= 7; d++) {
                         let cards = sessionMap[d][sess.key] || [];
                         if (cards.length > 0) {
-                            let content = cards.map(c => {
+                            let isSameTuan = cards.length > 1 && cards.every(co => co.tuanBD && co.tuanBD === cards[0].tuanBD);
+                            let content = cards.map(cObj => {
+                                let c = cObj.cardHtml;
+                                if (cards.length > 1 && !isSameTuan && cObj.tuanBD) {
+                                    c = c.replace('</span><br>', ` (Tuần BD: ${cObj.tuanBD})</span><br>`);
+                                }
                                 if (cards.length === 1) {
                                     return c.replace(
                                         'style="',
@@ -336,45 +393,104 @@ javascript: (function ketQuaDkhpModule() {
                     }
                 }
 
+                function addCellToGrid(dayNum, startP, endP, data) {
+                    if (dayNum < 2 || dayNum > 7) return;
+                    let start = Math.max(1, Math.floor(startP));
+                    let end = Math.min(maxPeriods, Math.floor(endP));
+                    let span = Math.max(1, end - start + 1);
+                    data.start = start;
+                    data.end = end;
+                    data.span = span;
+
+                    let placed = false;
+                    for (let pKey in gridMap[dayNum]) {
+                        let existingItems = gridMap[dayNum][pKey];
+                        for (let ex of existingItems) {
+                            if (start <= ex.end && ex.start <= end) {
+                                gridMap[dayNum][pKey].push(data);
+                                placed = true;
+                                break;
+                            }
+                        }
+                        if (placed) break;
+                    }
+
+                    if (!placed) {
+                        if (!gridMap[dayNum][start]) gridMap[dayNum][start] = [];
+                        gridMap[dayNum][start].push(data);
+                    }
+                }
+
                 courses.forEach(item => {
                     let key = item.id || (item.code + '_' + item.className);
                     let palette = courseColorMap[key] || COURSE_PALETTES[0];
                     let schedules = parseSchedule(item.scheduleStr);
 
                     schedules.forEach(s => {
-                        if (s.dayNum >= 2 && s.dayNum <= 7) {
-                            let start = Math.max(1, Math.floor(s.startPeriod));
-                            let end = Math.min(maxPeriods, Math.floor(s.endPeriod));
-                            let span = Math.max(1, end - start + 1);
-
-                            gridMap[s.dayNum][start] = {
-                                courseName: item.courseName,
-                                className: item.className,
-                                room: s.room,
-                                span: span,
-                                palette: palette
-                            };
-                        }
+                        addCellToGrid(s.dayNum, s.startPeriod, s.endPeriod, {
+                            courseName: item.courseName,
+                            className: item.className,
+                            room: s.room,
+                            tuanBD: item.tuanBD,
+                            palette: palette
+                        });
                     });
                 });
 
+                let uniformPeriodHeight = 30;
+                for (let d = 2; d <= 7; d++) {
+                    for (let pKey in gridMap[d]) {
+                        let items = gridMap[d][pKey];
+                        if (items && items.length > 0) {
+                            let maxSpan = Math.max(...items.map(it => it.span));
+                            let neededH = items.length === 1 ? (maxSpan * 30) : (items.length * 62 + 8);
+                            let reqH = Math.ceil(neededH / maxSpan);
+                            if (reqH > uniformPeriodHeight) {
+                                uniformPeriodHeight = reqH;
+                            }
+                        }
+                    }
+                }
+
                 for (let p = 1; p <= maxPeriods; p++) {
-                    tbodyHtml += `<tr style="height: 32px;"><td style="border: 1px solid #CCCCCC; font-weight: normal; background: #fafafa;">Tiết ${p}</td>`;
+                    tbodyHtml += `<tr style="height: ${uniformPeriodHeight}px;"><td style="border: 1px solid #CCCCCC; font-weight: normal; background: #fafafa; height: ${uniformPeriodHeight}px; vertical-align: middle;">Tiết ${p}</td>`;
                     for (let d = 2; d <= 7; d++) {
                         if (occupied[d][p]) continue;
 
-                        let cellData = gridMap[d][p];
-                        if (cellData) {
-                            let span = cellData.span;
-                            let palette = cellData.palette;
-                            for (let k = p; k < p + span && k <= maxPeriods; k++) {
+                        let items = gridMap[d][p];
+                        if (items && items.length > 0) {
+                            let maxSpan = Math.max(...items.map(it => it.span));
+                            for (let k = p; k < p + maxSpan && k <= maxPeriods; k++) {
                                 occupied[d][k] = true;
                             }
-                            tbodyHtml += `<td rowspan="${span}" style="border: 1px solid #CCCCCC; background: ${palette.bg}; color: ${palette.text}; vertical-align: middle; padding: 4px; font-size: 14px; text-align: center; line-height: 1.35; word-wrap: break-word; overflow-wrap: break-word; word-break: break-word;">
-                                ${cellData.courseName}<br>(${cellData.className})<br><span style="color: ${palette.roomText}; font-size: 11.5px;">${cellData.room}</span>
-                            </td>`;
+
+                            if (items.length === 1) {
+                                let cellData = items[0];
+                                tbodyHtml += `<td rowspan="${cellData.span}" style="border: 1px solid #CCCCCC; background: ${cellData.palette.bg}; color: ${cellData.palette.text}; vertical-align: middle; padding: 4px; font-size: 14px; text-align: center; line-height: 1.35; word-wrap: break-word; overflow-wrap: break-word; word-break: break-word; height: ${cellData.span * uniformPeriodHeight}px; box-sizing: border-box;">
+                                    ${cellData.courseName}<br>(${cellData.className})<br><span style="color: ${cellData.palette.roomText}; font-size: 11.5px;">${cellData.room}</span>
+                                </td>`;
+                            } else {
+                                let textColor = items[0].palette.text;
+                                let isSameTuanBD = items.length > 1 && items.every(it => it.tuanBD && it.tuanBD === items[0].tuanBD);
+
+                                let innerRowsHtml = items.map((cellData, idx) => {
+                                    let tuanText = (!isSameTuanBD && cellData.tuanBD) ? ` (Tuần BD: ${cellData.tuanBD})` : '';
+                                    return `
+                                        <div style="padding: 1px 0; line-height: 1.25;">
+                                            ${cellData.courseName}<br>(${cellData.className})<br><span style="color: ${cellData.palette.roomText}; font-size: 11px;">${cellData.room}${tuanText}</span>
+                                        </div>
+                                        ${idx < items.length - 1 ? `<div style="border-top: 1px dashed ${textColor}; margin: 3px 6px; opacity: 0.45;"></div>` : ''}
+                                    `;
+                                }).join('');
+
+                                tbodyHtml += `<td rowspan="${maxSpan}" style="border: 1px solid #CCCCCC; background: ${items[0].palette.bg}; color: ${textColor}; vertical-align: middle; padding: 4px 3px; font-size: 12.5px; text-align: center; line-height: 1.25; word-wrap: break-word; overflow-wrap: break-word; word-break: break-word; height: ${maxSpan * uniformPeriodHeight}px; box-sizing: border-box;">
+                                    <div style="display: flex; flex-direction: column; justify-content: space-around; height: 100%; box-sizing: border-box;">
+                                        ${innerRowsHtml}
+                                    </div>
+                                </td>`;
+                            }
                         } else {
-                            tbodyHtml += `<td style="border: 1px solid #CCCCCC;"></td>`;
+                            tbodyHtml += `<td style="border: 1px solid #CCCCCC; height: ${uniformPeriodHeight}px;"></td>`;
                         }
                     }
                     tbodyHtml += `</tr>`;
