@@ -479,7 +479,7 @@ javascript: (function ketQuaDkhpModule() {
                                         <div style="padding: 1px 0; line-height: 1.25;">
                                             ${cellData.courseName}<br>(${cellData.className})<br><span style="color: ${cellData.palette.roomText}; font-size: 11px;">${cellData.room}${tuanText}</span>
                                         </div>
-                                        ${idx < items.length - 1 ? `<div style="border-top: 1px dashed ${textColor}; margin: 3px 6px; opacity: 0.45;"></div>` : ''}
+                                        ${idx < items.length - 1 ? `<div style="border-top: 1px solid ${textColor}; margin: 3px 6px; opacity: 0.45;"></div>` : ''}
                                     `;
                                 }).join('');
 

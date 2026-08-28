@@ -22,12 +22,19 @@ with open('ketqua_dkhp.js', 'r', encoding='utf-8') as f:
 # Strip leading "javascript:" if present
 ketqua_dkhp_js = re.sub(r'^javascript:\s*', '', ketqua_dkhp_js)
 
+# Read Module 4: Auto DKHP (dkhp_auto.js - DangKyHocPhan.aspx)
+with open('dkhp_auto.js', 'r', encoding='utf-8') as f:
+    dkhp_auto_js = f.read()
+
+# Strip leading "javascript:" if present
+dkhp_auto_js = re.sub(r'^javascript:\s*', '', dkhp_auto_js)
+
 # Router entry point
 router_js = r"""
 (function mainRouter() {
     const portalReg = /(new-)?portal\d*\.hcmus\.edu\.vn/i;
     if (!window.location.hostname.match(portalReg)) {
-        alert("Vui lòng truy cập trang \"Tra cứu kết quả học tập\", \"Danh sách lớp mở\" hoặc \"Kết quả ĐKHP\" trên Portal HCMUS để dùng Tool nhé!");
+        alert("Vui lòng truy cập trang \"Tra cứu kết quả học tập\", \"Danh sách lớp mở\", \"Kết quả ĐKHP\" hoặc \"Đăng ký học phần\" trên Portal HCMUS để dùng Tool nhé!");
         return;
     }
 
@@ -43,14 +50,18 @@ router_js = r"""
         if (typeof window._initKetQuaDkhp === "function") {
             window._initKetQuaDkhp();
         }
+    } else if (window.location.href.includes("DangKyHocPhan.aspx")) {
+        if (typeof window._initAutoDangKyHocPhan === "function") {
+            window._initAutoDangKyHocPhan();
+        }
     } else {
-        alert("Vui lòng truy cập trang \"Tra cứu kết quả học tập\", \"Danh sách lớp mở\" hoặc \"Kết quả ĐKHP\" trên Portal HCMUS để dùng Tool nhé!");
+        alert("Vui lòng truy cập trang \"Tra cứu kết quả học tập\", \"Danh sách lớp mở\", \"Kết quả ĐKHP\" hoặc \"Đăng ký học phần\" trên Portal HCMUS để dùng Tool nhé!");
     }
 })();
 """
 
 # Combine all modules into a single bundled script
-bundled_js = gpa_js + "\n" + tkb_js + "\n" + ketqua_dkhp_js + "\n" + router_js
+bundled_js = gpa_js + "\n" + tkb_js + "\n" + ketqua_dkhp_js + "\n" + dkhp_auto_js + "\n" + router_js
 
 encoded_js = urllib.parse.quote(bundled_js, safe='')
 href = 'javascript:' + encoded_js
@@ -64,4 +75,4 @@ new_html = re.sub(r'href="javascript:[^"]*"', f'href="{href}"', html_content)
 with open('index.html', 'w', encoding='utf-8') as f:
     f.write(new_html)
 
-print("SUCCESS: index.html updated with encoded bookmarklet bundling GPA (gpa.js - pid=211), TKB Planner (tkb.js - pid=327), and Ket Qua DKHP (ketqua_dkhp.js - pid=212) modules!")
+print("SUCCESS: index.html updated with encoded bookmarklet bundling GPA (pid=211), TKB Planner (pid=327), Ket Qua DKHP (pid=212), and Auto DKHP (DangKyHocPhan.aspx) modules!")

@@ -1109,7 +1109,7 @@ javascript: (function tkbModule() {
                                     <div style="padding: 1px 0; line-height: 1.25;">
                                         ${cellData.courseName}<br>(${cellData.className})<br><span style="color: ${cellData.palette.roomText}; font-size: 11px;">${cellData.room}</span>
                                     </div>
-                                    ${idx < items.length - 1 ? `<div style="border-top: 1px dashed ${items[0].palette.text}; margin: 3px 6px; opacity: 0.45;"></div>` : ''}
+                                    ${idx < items.length - 1 ? `<div style="border-top: 1px solid ${items[0].palette.text}; margin: 3px 6px; opacity: 0.45;"></div>` : ''}
                                 `).join('');
 
                                 tbodyHtml += `<td rowspan="${maxSpan}" style="border: 1px solid #CCCCCC; background: ${items[0].palette.bg}; color: ${items[0].palette.text}; vertical-align: middle; padding: 4px 3px; font-size: 12.5px; text-align: center; line-height: 1.25; word-wrap: break-word; overflow-wrap: break-word; word-break: break-word; height: ${maxSpan * uniformPeriodHeight}px; box-sizing: border-box;">
