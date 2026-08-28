@@ -133,6 +133,34 @@ body {
     color: var(--accent);
 }
 
+.drag-subtext {
+    font-size: 11.5px;
+    color: var(--text-muted);
+    margin-top: 2px;
+    line-height: 1.35;
+}
+
+.drag-subtext b {
+    color: var(--primary);
+    font-weight: 700;
+}
+
+.bm-buttons-group {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    width: 100%;
+}
+
+.bm-or-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-muted);
+}
+
 .bm-btn {
     display: inline-flex;
     align-items: center;
@@ -141,7 +169,7 @@ body {
     color: #ffffff;
     font-size: 14.5px;
     font-weight: 700;
-    padding: 10px 25px;
+    padding: 10px 20px;
     text-decoration: none;
     cursor: grab;
     border: 2px solid var(--primary);
@@ -156,6 +184,23 @@ body {
     background: var(--accent);
     border-color: var(--accent);
     transform: translateY(-1px);
+}
+
+.bm-btn-auto {
+    background: var(--accent);
+    border-color: var(--accent);
+}
+
+.bm-btn[data-badge]::after {
+    content: " (" attr(data-badge) ")";
+    font-size: 13px;
+    font-weight: 500;
+    opacity: 0.9;
+}
+
+.bm-btn-auto:hover {
+    background: var(--primary);
+    border-color: var(--primary);
 }
 
 .bm-btn:active {
