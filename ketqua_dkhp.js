@@ -363,7 +363,10 @@ javascript: (function ketQuaDkhpModule() {
 
                         let periodSpan = Math.max(1, (s.endPeriod - s.startPeriod + 1));
                         let isHalf = periodSpan <= 3.5;
-                        let isBottomHalf = (sessionKey === 'morning' ? s.startPeriod >= 3.5 : (sessionKey === 'afternoon' ? s.startPeriod >= 8 : s.startPeriod >= 13));
+                        let midPeriod = (campus === 'cs1')
+                            ? (sessionKey === 'morning' ? 3.5 : (sessionKey === 'afternoon' ? 9.5 : 14.5))
+                            : (sessionKey === 'morning' ? 3 : (sessionKey === 'afternoon' ? 8 : 13));
+                        let isBottomHalf = s.startPeriod >= midPeriod;
 
                         sessionMap[s.dayNum][sessionKey].push({
                             courseName: item.courseName,
@@ -425,6 +428,8 @@ javascript: (function ketQuaDkhpModule() {
                     for (let d = 2; d <= 7; d++) {
                         let rawCards = sessionMap[d][sess.key] || [];
                         if (rawCards.length > 0) {
+                            rawCards.sort((a, b) => a.startMin - b.startMin);
+
                             let cardClusters = [];
                             rawCards.forEach(card => {
                                 let placed = false;
@@ -450,27 +455,23 @@ javascript: (function ketQuaDkhpModule() {
                                     let tuanText = '';
 
                                     let cardHtml = `
-                                    <div class="tkb-session-card" style="background: ${cData.palette.bg}; color: ${cData.palette.text}; vertical-align: middle; padding: 4px 3px; font-size: 13px; text-align: center; line-height: 1.3; word-wrap: break-word; overflow-wrap: break-word; word-break: break-word; margin: 2px 0; border-radius: 3px;">
-                                        ${cData.courseName}<br>
-                                        (${cData.className})<br>
-                                        <span style="color: ${cData.palette.roomText}; font-size: 11.5px;">${campusPrefix}${cData.room}${tuanText}</span><br>
-                                        <span style="color: ${cData.palette.text}; font-size: 11.5px;">${periodText} (${timeStr})</span>
+                                    <div class="tkb-session-card" style="background: ${cData.palette.bg}; color: ${cData.palette.text}; vertical-align: middle; padding: 4px 3px; font-size: 13px; text-align: center; line-height: 1.25; word-wrap: break-word; overflow-wrap: break-word; word-break: break-word; margin: 2px 0; border-radius: 3px; box-sizing: border-box;">
+                                        <div>${cData.courseName}</div>
+                                        <div style="font-size: 12px; opacity: 0.95;">(${cData.className})</div>
+                                        <div style="color: ${cData.palette.roomText}; font-size: 11.5px; line-height: 1.15; margin-top: 1px;">${campusPrefix}${cData.room}${tuanText}</div>
+                                        <div style="color: ${cData.palette.text}; font-size: 11.5px; line-height: 1.15; margin-top: 1px;">${periodText} (${timeStr})</div>
                                     </div>`;
 
-                                    if (cardClusters.length === 1) {
-                                        if (cData.isHalf) {
-                                            let justify = cData.isBottomHalf ? 'flex-end' : 'flex-start';
-                                            return `<div style="height: 100%; display: flex; flex-direction: column; justify-content: ${justify}; box-sizing: border-box;">
-                                                ${cardHtml.replace('style="', 'style="min-height: calc(50% - 4px); height: calc(50% - 4px); display: flex; flex-direction: column; justify-content: center; box-sizing: border-box; ')}
-                                            </div>`;
-                                        } else {
-                                            return cardHtml.replace(
-                                                'style="',
-                                                'style="min-height: calc(100% - 4px); height: calc(100% - 4px); display: flex; flex-direction: column; justify-content: center; box-sizing: border-box; '
-                                            );
-                                        }
+                                    if (cData.isHalf) {
+                                        let justify = cData.isBottomHalf ? 'flex-end' : 'flex-start';
+                                        return `<div style="height: 50%; display: flex; flex-direction: column; justify-content: ${justify}; box-sizing: border-box;">
+                                            ${cardHtml.replace('style="', 'style="min-height: calc(100% - 4px); height: calc(100% - 4px); display: flex; flex-direction: column; justify-content: center; box-sizing: border-box; ')}
+                                        </div>`;
+                                    } else {
+                                        return `<div style="height: 100%; display: flex; flex-direction: column; justify-content: center; box-sizing: border-box;">
+                                            ${cardHtml.replace('style="', 'style="min-height: calc(100% - 4px); height: calc(100% - 4px); display: flex; flex-direction: column; justify-content: center; box-sizing: border-box; ')}
+                                        </div>`;
                                     }
-                                    return cardHtml;
                                 } else {
                                     let mainPalette = cl.items[0].palette;
                                     let isSameTuan = cl.items.length > 1 && cl.items.every(co => co.tuanBD && co.tuanBD === cl.items[0].tuanBD);
@@ -480,24 +481,28 @@ javascript: (function ketQuaDkhpModule() {
                                         let timeStr = `${minutesToHHMM(cData.startMin)}-${minutesToHHMM(cData.endMin)}`;
                                         let tuanText = (!isSameTuan && cData.tuanBD) ? ` (Tuần BD: ${cData.tuanBD})` : '';
                                         return `
-                                            <div style="padding: 2px 0; line-height: 1.3;">
-                                                ${cData.courseName}<br>
-                                                (${cData.className})<br>
-                                                <span style="color: ${cData.palette.roomText}; font-size: 11.5px;">${campusPrefix}${cData.room}${tuanText}</span><br>
-                                                <span style="color: ${cData.palette.text}; font-size: 11.5px;">${periodText} (${timeStr})</span>
+                                            <div style="padding: 2px 0; line-height: 1.25;">
+                                                <div>${cData.courseName}</div>
+                                                <div style="font-size: 12px; opacity: 0.95;">(${cData.className})</div>
+                                                <div style="color: ${cData.palette.roomText}; font-size: 11.5px; line-height: 1.15; margin-top: 1px;">${campusPrefix}${cData.room}${tuanText}</div>
+                                                <div style="color: ${cData.palette.text}; font-size: 11.5px; line-height: 1.15; margin-top: 1px;">${periodText} (${timeStr})</div>
                                             </div>
                                             ${idx < cl.items.length - 1 ? `<div style="border-top: 1px solid ${mainPalette.text}; margin: 3px 6px; opacity: 0.45;"></div>` : ''}
                                         `;
                                     }).join('');
 
                                     return `
-                                    <div class="tkb-session-card" style="background: ${mainPalette.bg}; color: ${mainPalette.text}; vertical-align: middle; padding: 4px 3px; font-size: 13px; text-align: center; line-height: 1.3; word-wrap: break-word; overflow-wrap: break-word; word-break: break-word; margin: 2px 0; border-radius: 3px; min-height: calc(100% - 4px); height: calc(100% - 4px); display: flex; flex-direction: column; justify-content: space-around; box-sizing: border-box;">
+                                    <div class="tkb-session-card" style="background: ${mainPalette.bg}; color: ${mainPalette.text}; vertical-align: middle; padding: 4px 3px; font-size: 13px; text-align: center; line-height: 1.25; word-wrap: break-word; overflow-wrap: break-word; word-break: break-word; margin: 2px 0; border-radius: 3px; min-height: calc(100% - 4px); height: calc(100% - 4px); display: flex; flex-direction: column; justify-content: space-around; box-sizing: border-box;">
                                         ${innerRowsHtml}
                                     </div>`;
                                 }
                             }).join('');
+                            let justifyCell = 'space-between';
+                            if (cardClusters.length === 1 && cardClusters[0].items.length === 1 && cardClusters[0].items[0].isHalf) {
+                                justifyCell = cardClusters[0].items[0].isBottomHalf ? 'flex-end' : 'flex-start';
+                            }
                             tbodyHtml += `<td style="border: 1px solid #CCCCCC; vertical-align: top; padding: 4px; height: ${uniformRowHeight}px; box-sizing: border-box;">
-                                <div style="display: flex; flex-direction: column; align-items: stretch; justify-content: space-around; height: 100%;">
+                                <div style="display: flex; flex-direction: column; align-items: stretch; justify-content: ${justifyCell}; height: 100%;">
                                     ${clusterHtmls}
                                 </div>
                             </td>`;
@@ -567,6 +572,7 @@ javascript: (function ketQuaDkhpModule() {
                             courseName: item.courseName,
                             className: item.className,
                             room: s.room,
+                            campus: campus,
                             tuanBD: item.tuanBD,
                             palette: palette
                         }, campus);
@@ -602,18 +608,20 @@ javascript: (function ketQuaDkhpModule() {
 
                             if (items.length === 1) {
                                 let cellData = items[0];
+                                let campusPrefix = isMixedCampus ? (cellData.campus === 'cs1' ? '[NVC] ' : '[LT] ') : '';
                                 tbodyHtml += `<td rowspan="${cellData.span}" style="border: 1px solid #CCCCCC; background: ${cellData.palette.bg}; color: ${cellData.palette.text}; vertical-align: middle; padding: 4px; font-size: 14px; text-align: center; line-height: 1.35; word-wrap: break-word; overflow-wrap: break-word; word-break: break-word; height: ${cellData.span * uniformPeriodHeight}px; box-sizing: border-box;">
-                                    ${cellData.courseName}<br>(${cellData.className})<br><span style="color: ${cellData.palette.roomText}; font-size: 11.5px;">${cellData.room}</span>
+                                    ${cellData.courseName}<br>(${cellData.className})<br><span style="color: ${cellData.palette.roomText}; font-size: 11.5px;">${campusPrefix}${cellData.room}</span>
                                 </td>`;
                             } else {
                                 let textColor = items[0].palette.text;
                                 let isSameTuanBD = items.length > 1 && items.every(it => it.tuanBD && it.tuanBD === items[0].tuanBD);
 
                                 let innerRowsHtml = items.map((cellData, idx) => {
+                                    let campusPrefix = isMixedCampus ? (cellData.campus === 'cs1' ? '[NVC] ' : '[LT] ') : '';
                                     let tuanText = (!isSameTuanBD && cellData.tuanBD) ? ` (Tuần BD: ${cellData.tuanBD})` : '';
                                     return `
                                         <div style="padding: 1px 0; line-height: 1.25;">
-                                            ${cellData.courseName}<br>(${cellData.className})<br><span style="color: ${cellData.palette.roomText}; font-size: 11px;">${cellData.room}${tuanText}</span>
+                                            ${cellData.courseName}<br>(${cellData.className})<br><span style="color: ${cellData.palette.roomText}; font-size: 11px;">${campusPrefix}${cellData.room}${tuanText}</span>
                                         </div>
                                         ${idx < items.length - 1 ? `<div style="border-top: 1px solid ${textColor}; margin: 3px 6px; opacity: 0.45;"></div>` : ''}
                                     `;
