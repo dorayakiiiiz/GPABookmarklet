@@ -17,8 +17,8 @@ javascript: (function gpa() {
         let tab = $("#tbDiemThiGK");
         if (!tab.length) return;
 
-        // Fix Left Navbar White Gap on Scroll & Fix Table Side Indentation
-        $('<style>#page-body{display:flex!important;align-items:stretch!important}#page-body-menu{height:auto!important;min-height:100%!important;flex-shrink:0!important}#page-body-content{flex-grow:1!important;min-width:0!important}#tbDiemThiGK{width:100%!important;margin:0!important}.gpa-custom-name-input{text-align:left!important}.gpa-custom-name-input::placeholder,.gpa-custom-sem-input::placeholder,.gpa-custom-credit-input::placeholder,.gpa-score-input::placeholder{text-align:center!important}</style>').appendTo('head');
+        // Fix Left Navbar White Gap on Scroll & Fix Table Side Indentation & Align Toolbar & Search
+        $('<style>#page-body{display:flex!important;align-items:stretch!important}#page-body-menu{height:auto!important;min-height:100%!important;flex-shrink:0!important}#page-body-content{flex-grow:1!important;min-width:0!important}#tbDiemThiGK{width:100%!important;margin:0!important}.gpa-custom-name-input{text-align:left!important}.gpa-custom-name-input::placeholder,.gpa-custom-sem-input::placeholder,.gpa-custom-credit-input::placeholder,.gpa-score-input::placeholder{text-align:center!important}#tbDiemThiGK_wrapper .fg-toolbar:first-child{display:flex!important;align-items:center!important;justify-content:space-between!important}#tbDiemThiGK_wrapper .fg-toolbar:first-child:before,#tbDiemThiGK_wrapper .fg-toolbar:first-child:after{display:none!important}#gpaYearFilterWrapper{display:inline-flex!important;align-items:center!important;float:none!important;margin:0!important}#tbDiemThiGK_filter{float:none!important;display:inline-flex!important;align-items:center!important;margin:0 0 0 auto!important}#tbDiemThiGK_filter label{display:inline-flex!important;align-items:center!important;margin:0!important;float:none!important}#tbDiemThiGK_filter input{margin-left:5px!important;vertical-align:middle!important}</style>').appendTo('head');
 
         let customCoursesList = window._gpaCustomCoursesList || [];
         window._gpaCustomCoursesList = customCoursesList;
@@ -265,6 +265,179 @@ javascript: (function gpa() {
             return !year || year === "0" || year.toLowerCase().includes("tất cả");
         }
 
+        let selectedAcademicYears = []; // Empty means "Tất cả" (all years)
+
+        function getCourseAcademicYear(semesterStr) {
+            if (!semesterStr) return "";
+            let match = semesterStr.match(/(\d{2,4}-\d{2,4})/);
+            return match ? match[1] : "";
+        }
+
+        function isCourseInSelectedYears(item) {
+            if (!isAllSemestersMode()) return true;
+            if (!selectedAcademicYears || selectedAcademicYears.length === 0) return true;
+            let y = getCourseAcademicYear(item ? item.semester : "");
+            if (!y) return true;
+            return selectedAcademicYears.includes(y);
+        }
+
+        function getAvailableAcademicYears() {
+            let yearSet = new Set();
+            if (data && data.length) {
+                data.forEach(d => {
+                    let y = getCourseAcademicYear(d.semester);
+                    if (y) yearSet.add(y);
+                });
+            }
+            if (customCoursesList && customCoursesList.length) {
+                customCoursesList.forEach(c => {
+                    let y = getCourseAcademicYear(c.semester);
+                    if (y) yearSet.add(y);
+                });
+            }
+            return Array.from(yearSet).sort();
+        }
+
+        function applyYearFilterVisibility() {
+            if (!isAllSemestersMode()) return;
+            tab.find('tbody tr').each(function () {
+                let idAttr = $(this).attr("id");
+                let item = data.find(d => String(d.id) === String(idAttr)) ||
+                    customCoursesList.find(c => String(c.id) === String(idAttr));
+                if (!item) return;
+
+                if (isCourseInSelectedYears(item)) {
+                    $(this).css('display', '');
+                } else {
+                    $(this).css('display', 'none');
+                }
+            });
+
+            tab.find('tbody tr:visible').each(function (idx) {
+                $(this).removeClass('odd even').addClass(idx % 2 === 0 ? 'odd' : 'even');
+            });
+        }
+
+        function updateYearFilterBtnText() {
+            let btn = $('#gpaYearFilterBtn');
+            if (!btn.length) return;
+            if (!selectedAcademicYears || selectedAcademicYears.length === 0) {
+                btn.text('Tất cả ▾');
+                $('#gpaYearCheckAll').prop('checked', true);
+            } else if (selectedAcademicYears.length === 1) {
+                btn.text(selectedAcademicYears[0] + ' ▾');
+                $('#gpaYearCheckAll').prop('checked', false);
+            } else if (selectedAcademicYears.length <= 2) {
+                btn.text(selectedAcademicYears.join(', ') + ' ▾');
+                $('#gpaYearCheckAll').prop('checked', false);
+            } else {
+                btn.text(selectedAcademicYears.length + ' năm ▾');
+                $('#gpaYearCheckAll').prop('checked', false);
+            }
+        }
+
+        function applyYearFilter() {
+            cal = new Calculation();
+            cal.calculateGPA();
+            cal.updateGpaStats();
+            applyYearFilterVisibility();
+        }
+
+        function setupYearFilterDropdown() {
+            if (!isAllSemestersMode()) return;
+            let topToolbar = $('#tbDiemThiGK_wrapper .fg-toolbar').first();
+            if (!topToolbar.length) return;
+
+            let availableYears = getAvailableAcademicYears();
+            if (availableYears.length === 0) return;
+
+            if (!$('#gpaYearFilterWrapper').length) {
+                let filterWrapper = $(
+                    '<div id="gpaYearFilterWrapper" style="position: relative; display: inline-flex; align-items: center; font-family: inherit; margin: 0;">' +
+                    '  <label style="font-weight: normal; margin-right: 4px; font-size: 13px; color: #000;">Năm học:</label>' +
+                    '  <div id="gpaYearBtnContainer" style="position: relative; display: inline-block;">' +
+                    '    <button type="button" id="gpaYearFilterBtn" style="padding: 2px 10px; height: 23px; border: 1px solid #c0c0c0; background: #fff; font-size: 13px; cursor: pointer; vertical-align: middle; border-radius: 3px; font-family: inherit; color: #000; box-sizing: border-box; line-height: 1;">' +
+                    '      Tất cả ▾' +
+                    '    </button>' +
+                    '    <div id="gpaYearFilterDropdown" style="display: none; position: absolute; top: calc(100% + 4px); left: 0; z-index: 99999; background: #ffffff; border: 1px solid #c0c0c0; border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); padding: 8px 12px; min-width: 130px; box-sizing: border-box;">' +
+                    '      <div style="margin-bottom: 6px; padding-bottom: 4px; border-bottom: 1px solid #eee;">' +
+                    '        <label style="cursor: pointer; font-weight: bold; font-size: 12px; display: flex; align-items: center; gap: 6px; color: #000; margin: 0;">' +
+                    '          <input type="checkbox" id="gpaYearCheckAll" checked style="cursor: pointer; margin: 0;" /> Tất cả' +
+                    '        </label>' +
+                    '      </div>' +
+                    '      <div id="gpaYearCheckboxList" style="display: flex; flex-direction: column; gap: 4px; max-height: 160px; overflow-y: auto;"></div>' +
+                    '    </div>' +
+                    '  </div>' +
+                    '</div>'
+                );
+
+                topToolbar.prepend(filterWrapper);
+
+                $('#gpaYearFilterBtn').off('click').on('click', function (e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    $('#gpaYearFilterDropdown').slideToggle(120);
+                });
+
+                $('#gpaYearFilterDropdown').off('click').on('click', function (e) {
+                    e.stopPropagation();
+                });
+
+                $(document).off('click.gpaYearFilter').on('click.gpaYearFilter', function () {
+                    $('#gpaYearFilterDropdown').hide();
+                });
+
+                $('#gpaYearCheckAll').off('change').on('change', function () {
+                    let isChecked = $(this).is(':checked');
+                    $('.gpa-year-checkbox').prop('checked', isChecked);
+                    if (isChecked) {
+                        selectedAcademicYears = [];
+                    } else {
+                        selectedAcademicYears = [];
+                        $(this).prop('checked', true);
+                        $('.gpa-year-checkbox').prop('checked', true);
+                    }
+                    updateYearFilterBtnText();
+                    applyYearFilter();
+                });
+
+                $('#gpaYearCheckboxList').off('change', '.gpa-year-checkbox').on('change', '.gpa-year-checkbox', function () {
+                    let total = $('.gpa-year-checkbox').length;
+                    let checkedEls = $('.gpa-year-checkbox:checked');
+                    if (checkedEls.length === 0) {
+                        $(this).prop('checked', true);
+                        return;
+                    }
+                    if (checkedEls.length === total) {
+                        selectedAcademicYears = [];
+                        $('#gpaYearCheckAll').prop('checked', true);
+                    } else {
+                        $('#gpaYearCheckAll').prop('checked', false);
+                        selectedAcademicYears = [];
+                        checkedEls.each(function () {
+                            selectedAcademicYears.push($(this).val());
+                        });
+                    }
+                    updateYearFilterBtnText();
+                    applyYearFilter();
+                });
+            }
+
+            let checkListContainer = $('#gpaYearCheckboxList');
+            checkListContainer.empty();
+            availableYears.forEach(y => {
+                let isChecked = selectedAcademicYears.length === 0 || selectedAcademicYears.includes(y);
+                checkListContainer.append(
+                    '<label style="cursor: pointer; font-size: 12px; display: flex; align-items: center; gap: 6px; color: #000; margin: 0;">' +
+                    '  <input type="checkbox" class="gpa-year-checkbox" value="' + y + '"' + (isChecked ? ' checked' : '') + ' style="cursor: pointer; margin: 0;" /> Năm học ' + y +
+                    '</label>'
+                );
+            });
+
+            updateYearFilterBtnText();
+            applyYearFilterVisibility();
+        }
+
         function isCourseInSemesterGpaScope(item) {
             if (!item || !item.credit || item.credit <= 0) return false;
             if (item.whyExclude && item.whyExclude.includes("không tính")) return false;
@@ -281,6 +454,7 @@ javascript: (function gpa() {
         function getSemesterData() {
             let semMap = {};
             data.forEach(item => {
+                if (!isCourseInSelectedYears(item)) return;
                 if (!item.include || !item.credit || item.score <= 0 || item.semester === '-' || !item.semester) return;
                 let sem = item.semester.trim();
                 if (!semMap[sem]) {
@@ -801,8 +975,14 @@ javascript: (function gpa() {
                 let howICalculated = "%c Điểm tính thế nào nhở ?%c \n\n";
                 let cssLog = ["font-size:16px", "font-size:normal"];
 
+                this.removedCoursesSize = 0;
+                this.activeCoursesCount = 0;
+
                 for (let i = 0; i < data.length; i++) {
                     let item = data[i];
+                    if (!isCourseInSelectedYears(item)) continue;
+                    this.activeCoursesCount++;
+
                     if (item.include && item.score >= 5 && item.credit > 0) {
                         this.totalCredits += item.credit;
                         this.totalScores += item.credit * item.score;
@@ -823,6 +1003,8 @@ javascript: (function gpa() {
                         cssLog.push("color:orange;text-decoration: line-through;");
                         cssLog.push("color:black;");
                     }
+
+                    if (!item.include) this.removedCoursesSize++;
                 }
 
                 this.gpa = this.totalCredits > 0 ? this.totalScores / this.totalCredits : 0;
@@ -830,16 +1012,11 @@ javascript: (function gpa() {
                 const denom = this.totalCredits + this.notPassCredits;
                 this.notPassGPA = denom > 0 ? (this.totalScores + this.notPassTotalScore) / denom : 0;
 
-                this.removedCoursesSize = 0;
-                for (let i = 0; i < data.length; i++) {
-                    if (!data[i].include) this.removedCoursesSize++;
-                }
-
                 console.log("%c \n Chào nhé, GPA nè:\n %c" + toFixed(this.gpa) + "\n", "color:black", "color:blue; font-size: 30px;");
                 console.log("%c \n Tổng tín chỉ:\n %c" + this.totalCredits + "\n", "color:black", "color:blue; font-size: 30px;");
                 console.log("%c \n Tổng điểm:\n %c" + toFixed(this.totalScores) + "\n", "color:black", "color:blue; font-size: 30px;");
-                console.log("%c \n Tổng học phần:\n %c" + data.length + "\n", "color:black", "color:blue; font-size: 30px;");
-                console.log("%c \n Tổng học phần trong GPA:\n %c" + (data.length - this.removedCoursesSize) + "\n", "color:black", "color:blue; font-size: 30px;");
+                console.log("%c \n Tổng học phần:\n %c" + this.activeCoursesCount + "\n", "color:black", "color:blue; font-size: 30px;");
+                console.log("%c \n Tổng học phần trong GPA:\n %c" + (this.activeCoursesCount - this.removedCoursesSize) + "\n", "color:black", "color:blue; font-size: 30px;");
 
                 howICalculated += "-------------\n" + "GPA : %c " + toFixed(this.totalScores) + " / " + this.totalCredits + " = " + toFixed(this.gpa);
                 cssLog.push("font-weight:bold");
@@ -881,12 +1058,13 @@ javascript: (function gpa() {
                     targetGpa = parseFloat($('#targetDegreeSelect').val()) || 8.0;
                     let selText = $("#targetDegreeSelect option:selected").text();
                     targetName = selText.split(' (')[0].trim();
-                    if (!targetName.startsWith("bằng") && !targetName.startsWith("Bằng") && isAllSemestersMode()) {
+                    if (!targetName.startsWith("bằng") && !targetName.startsWith("Bằng") && isAllSemestersMode() && (!selectedAcademicYears || selectedAcademicYears.length === 0)) {
                         targetName = "bằng " + targetName;
                     }
                 }
 
-                if (isAllSemestersMode()) {
+                let isFullGraduation = isAllSemestersMode() && (!selectedAcademicYears || selectedAcademicYears.length === 0);
+                if (isFullGraduation) {
                     let targetCredits = parseInt($('#targetCreditsInput').val()) || 138;
                     let remCredits = targetCredits - this.totalCredits;
 
@@ -907,37 +1085,41 @@ javascript: (function gpa() {
                         resBox.html('Để đạt ' + targetName + ', trung bình ' + remCredits + ' TC còn lại bạn cần đạt tối thiểu ' + toFixed(reqAvgScore) + ' điểm/môn.');
                     }
                 } else {
-                    let totalSemCredits = 0;
-                    let completedSemCredits = 0;
-                    let completedSemScores = 0;
+                    let totalScopeCredits = 0;
+                    let completedScopeCredits = 0;
+                    let completedScopeScores = 0;
 
                     data.forEach(item => {
+                        if (!isCourseInSelectedYears(item)) return;
                         if (!isCourseInSemesterGpaScope(item)) return;
-                        totalSemCredits += item.credit;
+                        totalScopeCredits += item.credit;
                         if (item.score > 0 || (!item.isAbsent && !item.isNoScore)) {
-                            completedSemCredits += item.credit;
-                            completedSemScores += item.credit * item.score;
+                            completedScopeCredits += item.credit;
+                            completedScopeScores += item.credit * item.score;
                         }
                     });
 
-                    let remSemCredits = totalSemCredits - completedSemCredits;
+                    let remCredits = totalScopeCredits - completedScopeCredits;
+                    let scopeTitle = (isAllSemestersMode() && selectedAcademicYears && selectedAcademicYears.length > 0)
+                        ? ("năm học " + selectedAcademicYears.join(', '))
+                        : "học kỳ";
 
-                    if (remSemCredits <= 0) {
-                        let semGpa = totalSemCredits > 0 ? completedSemScores / totalSemCredits : 0;
-                        resBox.html('Tất cả môn trong học kỳ này đã có điểm (GPA học kỳ: ' + toFixed(semGpa) + ').');
+                    if (remCredits <= 0) {
+                        let scopeGpa = totalScopeCredits > 0 ? completedScopeScores / totalScopeCredits : 0;
+                        resBox.html('Tất cả môn trong ' + scopeTitle + ' này đã có điểm (GPA: ' + toFixed(scopeGpa) + ').');
                         return;
                     }
 
-                    let reqTotalSemScore = totalSemCredits * targetGpa;
-                    let reqRemSemScore = reqTotalSemScore - completedSemScores;
-                    let reqAvgSemScore = reqRemSemScore / remSemCredits;
+                    let reqTotalScore = totalScopeCredits * targetGpa;
+                    let reqRemScore = reqTotalScore - completedScopeScores;
+                    let reqAvgScore = reqRemScore / remCredits;
 
-                    if (reqAvgSemScore > 10.0) {
-                        resBox.html('Cần trung bình ' + toFixed(reqAvgSemScore) + ' điểm/môn cho ' + remSemCredits + ' TC chưa có điểm (Vượt quá 10.0 - Không đủ khả năng đạt GPA học kỳ ' + targetName + ').');
-                    } else if (reqAvgSemScore <= 0) {
-                        resBox.html('Bạn đã đủ điểm đạt GPA học kỳ ' + targetName + '! Chỉ cần thi qua môn cho ' + remSemCredits + ' TC chưa có điểm còn lại.');
+                    if (reqAvgScore > 10.0) {
+                        resBox.html('Cần trung bình ' + toFixed(reqAvgScore) + ' điểm/môn cho ' + remCredits + ' TC chưa có điểm (Vượt quá 10.0 - Không đủ khả năng đạt GPA ' + scopeTitle + ' ' + targetName + ').');
+                    } else if (reqAvgScore <= 0) {
+                        resBox.html('Bạn đã đủ điểm đạt GPA ' + scopeTitle + ' ' + targetName + '! Chỉ cần thi qua môn cho ' + remCredits + ' TC chưa có điểm còn lại.');
                     } else {
-                        resBox.html('Để đạt GPA học kỳ ' + targetName + ', trung bình ' + remSemCredits + ' TC chưa có điểm còn lại bạn cần đạt tối thiểu ' + toFixed(reqAvgSemScore) + ' điểm/môn.');
+                        resBox.html('Để đạt GPA ' + scopeTitle + ' ' + targetName + ', trung bình ' + remCredits + ' TC chưa có điểm còn lại bạn cần đạt tối thiểu ' + toFixed(reqAvgScore) + ' điểm/môn.');
                     }
                 }
             }
@@ -981,8 +1163,8 @@ javascript: (function gpa() {
                     targetSectionHtml = '<div id="targetGpaSection" style="margin-top: 15px; margin-bottom: 15px; padding: 12px 0; border-top: 1px solid #dce4ec; border-bottom: 1px solid #dce4ec; font-size: 14px; line-height: 1.6;">' +
                         '<div style="font-weight: bold; margin-bottom: 8px; color: #1b486a;">Ước lượng GPA mục tiêu tốt nghiệp:</div>' +
                         '<div style="display: flex; gap: 20px; align-items: center; flex-wrap: wrap; margin-bottom: 8px;">' +
-                        '<label>Tổng TC tốt nghiệp: <input type="number" id="targetCreditsInput" value="' + currentTargetCredits + '" min="1" style="width: 55px; text-align: center; border: 1px solid #c0c0c0; padding: 2px 4px;" /></label>' +
-                        '<label>Mục tiêu bằng: ' +
+                        '<label id="targetCreditsInputWrapper">Tổng TC tốt nghiệp: <input type="number" id="targetCreditsInput" value="' + currentTargetCredits + '" min="1" style="width: 55px; text-align: center; border: 1px solid #c0c0c0; padding: 2px 4px;" /></label>' +
+                        '<label><span id="targetDegreeSelectLabel">Mục tiêu bằng:</span> ' +
                         '<select id="targetDegreeSelect" style="border: 1px solid #c0c0c0; padding: 2px 4px;">' +
                         '<option value="9.0"' + (currentTargetDegree === "9.0" ? " selected" : "") + '>Xuất Sắc (&gt;= 9.0 / 3.6)</option>' +
                         '<option value="8.0"' + (currentTargetDegree === "8.0" ? " selected" : "") + '>Giỏi (&gt;= 8.0 / 3.2)</option>' +
@@ -1037,8 +1219,10 @@ javascript: (function gpa() {
                 $(gpaTableBody).append('<tr class="even"><td class="left">Điểm trung bình học tập</td><td class="center gpa" id="calNotPassGPA">' + toFixed(this.notPassGPA) + '</td></tr>');
                 $(gpaTableBody).append('<tr class="odd"><td class="left">Tổng tín chỉ đã tích luỹ</td><td class="center gpa" id="calSumCredit">' + this.totalCredits + ' tín chỉ</td></tr>');
                 $(gpaTableBody).append('<tr class="even"><td class="left">Tổng điểm đã tích lũy</td><td class="center gpa" id="sumScore">' + toFixed(this.totalScores) + '</td></tr>');
-                $(gpaTableBody).append('<tr class="odd"><td class="left">Số học phần đã học</td><td class="center gpa" id="sumCourse">' + data.length + ' học phần</td></tr>');
-                $(gpaTableBody).append('<tr class="even"><td class="left">Số học phần tính trong GPA</td><td class="center gpa" id="sumCalCourse">' + (data.length - this.removedCoursesSize) + ' học phần</td></tr>');
+                let totalCourses = (this.activeCoursesCount !== undefined ? this.activeCoursesCount : data.length);
+                let inGpaCourses = (totalCourses - this.removedCoursesSize);
+                $(gpaTableBody).append('<tr class="odd"><td class="left">Số học phần đã học</td><td class="center gpa" id="sumCourse">' + totalCourses + ' học phần</td></tr>');
+                $(gpaTableBody).append('<tr class="even"><td class="left">Số học phần tính trong GPA</td><td class="center gpa" id="sumCalCourse">' + inGpaCourses + ' học phần</td></tr>');
 
                 $(parentDiv).prepend(gpaFieldSet);
 
@@ -1069,6 +1253,10 @@ javascript: (function gpa() {
                 }
 
                 this.updateTargetPlanner();
+                if (isAllSemestersMode() && selectedAcademicYears && selectedAcademicYears.length > 0) {
+                    $('#targetCreditsInputWrapper').hide();
+                    $('#targetDegreeSelectLabel').text('Mục tiêu năm học:');
+                }
 
                 let allTrs = tab.find('tbody tr');
                 for (let i = 0; i < allTrs.length; i++) {
@@ -1095,10 +1283,14 @@ javascript: (function gpa() {
                             rowEl.css({ "color": "blue", "text-decoration": "none" });
                             childEls.css({ "color": "blue", "text-decoration": "none" });
                         } else {
-                            rowEl.removeAttr("style");
+                            rowEl.css({ "color": "", "text-decoration": "" });
                             childEls.css({ "color": "", "text-decoration": "" });
                         }
                     }
+                }
+
+                if (isAllSemestersMode()) {
+                    applyYearFilterVisibility();
                 }
             }
 
@@ -1123,11 +1315,12 @@ javascript: (function gpa() {
                 $('#calDegreeBadge').html(badgeText);
                 $('#calNotPassGPA').text(toFixed(this.notPassGPA));
                 $('#calSumCredit').text(this.totalCredits + ' tín chỉ');
-                $('#sumScore').text(toFixed(this.totalScores));
-                $('#sumCourse').text(data.length + ' học phần');
-                $('#sumCalCourse').text((data.length - this.removedCoursesSize) + ' học phần');
+                let totalCourses = (this.activeCoursesCount !== undefined ? this.activeCoursesCount : data.length);
+                let inGpaCourses = (totalCourses - this.removedCoursesSize);
+                $('#sumCourse').text(totalCourses + ' học phần');
+                $('#sumCalCourse').text(inGpaCourses + ' học phần');
 
-                // Update semester TC label in target section heading if in sem mode
+                // Update semester/year TC label in target section heading
                 if (!isAllSemestersMode()) {
                     let semTotalCredits = 0;
                     data.forEach(item => { if (isCourseInSemesterGpaScope(item)) semTotalCredits += item.credit; });
@@ -1135,6 +1328,22 @@ javascript: (function gpa() {
                     if (heading.length) {
                         heading.html('Ước lượng GPA mục tiêu học kỳ (' + semTotalCredits + ' TC):');
                     }
+                } else if (selectedAcademicYears && selectedAcademicYears.length > 0) {
+                    let yearTotalCredits = 0;
+                    data.forEach(item => { if (isCourseInSelectedYears(item) && isCourseInSemesterGpaScope(item)) yearTotalCredits += item.credit; });
+                    let heading = $('#targetGpaSection div:first-child');
+                    if (heading.length) {
+                        heading.html('Ước lượng GPA mục tiêu năm ' + selectedAcademicYears.join(', ') + ' (' + yearTotalCredits + ' TC):');
+                    }
+                    $('#targetCreditsInputWrapper').hide();
+                    $('#targetDegreeSelectLabel').text('Mục tiêu năm học:');
+                } else {
+                    let heading = $('#targetGpaSection div:first-child');
+                    if (heading.length) {
+                        heading.html('Ước lượng GPA mục tiêu tốt nghiệp:');
+                    }
+                    $('#targetCreditsInputWrapper').show();
+                    $('#targetDegreeSelectLabel').text('Mục tiêu bằng:');
                 }
 
                 this.updateTargetPlanner();
@@ -1171,10 +1380,14 @@ javascript: (function gpa() {
                             rowEl.css({ "color": "blue", "text-decoration": "none" });
                             childEls.css({ "color": "blue", "text-decoration": "none" });
                         } else {
-                            rowEl.removeAttr("style");
+                            rowEl.css({ "color": "", "text-decoration": "" });
                             childEls.css({ "color": "", "text-decoration": "" });
                         }
                     }
+                }
+
+                if (isAllSemestersMode()) {
+                    applyYearFilterVisibility();
                 }
             }
         }
@@ -1184,7 +1397,7 @@ javascript: (function gpa() {
             constructor() { }
 
             exportToPdf() {
-                let exportData = data;
+                let exportData = data.filter(d => isCourseInSelectedYears(d));
                 let exportCal = cal;
                 if (!exportCal) return;
 
@@ -1206,6 +1419,8 @@ javascript: (function gpa() {
                     let yearInput = ($('#ctl00_ContentPlaceHolder1_ctl00_cboNamHoc_gvDKHPLichThi_ob_CbocboNamHoc_gvDKHPLichThiTB').val() || "").trim();
                     let hkInput = ($('#ctl00_ContentPlaceHolder1_ctl00_cboHocKy_gvDKHPLichThi_ob_CbocboHocKy_gvDKHPLichThiTB').val() || "").trim();
                     scopeText = "Học kỳ " + hkInput + " - Năm học " + yearInput;
+                } else if (selectedAcademicYears && selectedAcademicYears.length > 0) {
+                    scopeText = "Năm học " + selectedAcademicYears.join(', ');
                 }
 
                 let rowsHtml = '';
@@ -1315,7 +1530,7 @@ javascript: (function gpa() {
             constructor() { }
 
             saveToFileCSV() {
-                let exportData = data;
+                let exportData = data.filter(d => isCourseInSelectedYears(d));
                 let exportCal = cal;
                 if (!exportCal) return;
 
@@ -1326,13 +1541,14 @@ javascript: (function gpa() {
                     }
                 });
 
+                let totalExportCourses = (exportCal.activeCoursesCount !== undefined ? exportCal.activeCoursesCount : exportData.length);
                 csv += "Điểm trung bình tích lũy (GPA): " + toFixed(exportCal.gpa) + "\n";
                 csv += "Điểm trung bình tích lũy (GPA) hệ 4: " + toFixed(exportCal.fourGPA) + "\n";
                 csv += "Điểm trung bình học tập: " + toFixed(exportCal.notPassGPA) + "\n";
                 csv += "Số tín chỉ tích lũy: " + exportCal.totalCredits + "\n";
                 csv += "Tổng điểm tích lũy: " + toFixed(exportCal.totalScores) + "\n";
-                csv += "Tổng học phần: " + exportData.length + "\n";
-                csv += "Tổng học phần trong GPA: " + (exportData.length - exportCal.removedCoursesSize) + "\n";
+                csv += "Tổng học phần: " + totalExportCourses + "\n";
+                csv += "Tổng học phần trong GPA: " + (totalExportCourses - exportCal.removedCoursesSize) + "\n";
 
                 let hiddenElement = document.createElement('a');
                 hiddenElement.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent('\uFEFF' + csv);
@@ -1356,6 +1572,10 @@ javascript: (function gpa() {
             // that happen inside addSupplementaryGrade/formatCoursesTableAndCreateResultTable.
             // If custom rows are appended earlier, those redraws wipe them from the tbody.
             renderCustomCoursesInTable();
+            if (isAllSemestersMode()) {
+                applyYearFilterVisibility();
+                setupYearFilterDropdown();
+            }
         }
 
         let cal = null;
@@ -1473,9 +1693,18 @@ javascript: (function gpa() {
                         $(this).removeClass('odd even').addClass(idx % 2 === 0 ? 'odd' : 'even');
                     });
                 }
+
+                if (isAllSemestersMode()) {
+                    applyYearFilterVisibility();
+                }
             }
         });
         tab.css({ 'width': '100%', 'margin': '0' });
+
+        if (isAllSemestersMode()) {
+            setupYearFilterDropdown();
+            applyYearFilterVisibility();
+        }
 
 
 
@@ -1740,6 +1969,11 @@ javascript: (function gpa() {
                     window._gpaSavedEditedScores = {};
                     customCoursesList = [];
                     window._gpaCustomCoursesList = [];
+                    selectedAcademicYears = [];
+                    if ($('#gpaYearFilterBtn').length) {
+                        updateYearFilterBtnText();
+                        setupYearFilterDropdown();
+                    }
                 } else {
                     let yearInput = ($('#ctl00_ContentPlaceHolder1_ctl00_cboNamHoc_gvDKHPLichThi_ob_CbocboNamHoc_gvDKHPLichThiTB').val() || "").trim().toLowerCase();
                     if (!yearInput || yearInput === "0") {
