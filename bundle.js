@@ -60,10 +60,10 @@
                 if (window._gpaCustomCoursesList && window._gpaCustomCoursesList.length > 0) {
                     let existingRaw = localStorage.getItem('gpa_saved_custom_courses');
                     let existingCustom = existingRaw ? JSON.parse(existingRaw) : [];
-                    
+
                     let { year, hk } = getSelectedYearAndHk();
                     let targetSem = (year + '/' + hk).toLowerCase();
-                    
+
                     let otherSemCustom = existingCustom.filter(c => {
                         if (!c) return false;
                         if (isAllSemestersMode()) return false;
@@ -71,7 +71,7 @@
                     });
 
                     let mergedCustom = [...otherSemCustom, ...window._gpaCustomCoursesList];
-                    
+
                     let uniqueCustom = [];
                     let seen = new Set();
                     mergedCustom.forEach(c => {
@@ -242,7 +242,7 @@
                         }
                     }
                 });
-            } catch(e) {
+            } catch (e) {
                 console.error("[GPA RESTORE] Error during restore:", e);
             }
             refreshAllDataAndUI();
@@ -491,7 +491,6 @@
             if (!cSem || cSem === "-") return true;
 
             let match = cSem === targetSem || cSem === year.toLowerCase() || (addedSem !== "" && addedSem === targetSem);
-            console.log("[GPA SCOPE] isCustomCourseInScope: course: " + (cItem.course || "") + ", cSem: " + cSem + ", addedSem: " + addedSem + ", targetSem: " + targetSem + " -> match: " + match);
             return match;
         }
 
@@ -747,9 +746,23 @@
                 let displayLetter = (dItem && dItem.letter) ? dItem.letter : (item.letter || '-');
                 let displayFour = (dItem && dItem.fourRounding !== undefined && dItem.fourRounding !== null) ? dItem.fourRounding : (item.fourRounding || 0);
 
-                let trHtml = '<tr class="odd gpa-custom-row" id="' + item.id + '">' +
+                let rowColor = 'blue';
+                let rowDecor = 'none';
+                if (!inc) {
+                    rowDecor = 'line-through';
+                    if (item.whyExclude && item.whyExclude.includes('không tính')) {
+                        rowColor = 'blue';
+                    } else if (item.whyExclude && item.whyExclude.includes('bỏ chọn')) {
+                        rowColor = 'grey';
+                    } else {
+                        rowColor = 'red';
+                    }
+                }
+                let trStyle = 'color: ' + rowColor + '; text-decoration: ' + rowDecor + ';';
+
+                let trHtml = '<tr class="odd gpa-custom-row" id="' + item.id + '" style="' + trStyle + '">' +
                     '<td class="center gpa-checkbox" style="width:60px;"><input type="checkbox"' + (inc ? " checked" : "") + ' /><div hidden>' + (inc ? 1 : 0) + '</div></td>' +
-                    '<td class="center sorting_1" style="width: 80px;"><span style="display:none;">' + semVal + '_z</span><input type="text" class="gpa-custom-sem-input" data-id="' + item.id + '" value="' + semVal + '" placeholder="-" style="width: 65px; text-align: center; border: 1px solid #c0c0c0; background: transparent; color: inherit; font-family: inherit; font-size: inherit; padding: 1px 2px;" /></td>' +
+                    '<td class="center" style="width: 80px;"><span style="display:none;">' + semVal + '_z</span><input type="text" class="gpa-custom-sem-input" data-id="' + item.id + '" value="' + semVal + '" placeholder="-" style="width: 65px; text-align: center; border: 1px solid #c0c0c0; background: transparent; color: inherit; font-family: inherit; font-size: inherit; padding: 1px 2px;" /></td>' +
                     '<td class="left" style="padding: 2px 4px; vertical-align: middle;"><textarea class="gpa-custom-name-input" data-id="' + item.id + '" placeholder="-" title="' + nameVal + '" style="width: 100%; min-width: 100%; height: 26px; resize: none; border: 1px solid #c0c0c0; background: transparent; color: inherit; font-family: inherit; font-size: inherit; padding: 2px 4px; box-sizing: border-box; vertical-align: middle; overflow: hidden; line-height: 1.3;" rows="1">' + nameVal + '</textarea></td>' +
                     '<td class="center" style="width: 60px;"><input type="text" class="gpa-custom-credit-input" data-id="' + item.id + '" value="' + creditVal + '" placeholder="-" style="width: 45px; text-align: center; border: 1px solid #c0c0c0; background: transparent; color: inherit; font-family: inherit; font-size: inherit; padding: 1px 2px;" /></td>' +
                     '<td class="center" style="width: 60px;">DK</td>' +
@@ -1335,11 +1348,14 @@
             initUserCourseData();
             addSupplementaryGrade();
             renderEditableScoreCells();
-            renderCustomCoursesInTable();
             cal = new Calculation();
             cal.calculateGPA();
             cal.formatCoursesTableAndCreateResultTable();
             saveGpaSimulationData();
+            // Render custom rows LAST — after all DOM manipulations and DataTables redraws
+            // that happen inside addSupplementaryGrade/formatCoursesTableAndCreateResultTable.
+            // If custom rows are appended earlier, those redraws wipe them from the tbody.
+            renderCustomCoursesInTable();
         }
 
         let cal = null;
@@ -1366,6 +1382,44 @@
             return parseFloat(a) || 0;
         }
 
+        function getRowSortValue(tr, colIndex) {
+            let $tr = $(tr);
+            let tds = $tr.children('td');
+            if (colIndex === 0) {
+                return $tr.find('.gpa-checkbox input').is(':checked') ? 1 : 0;
+            }
+            if (colIndex === 1) {
+                let semInput = $tr.find('.gpa-custom-sem-input');
+                return semInput.length ? semInput.val().trim() : $(tds[1]).text().trim();
+            }
+            if (colIndex === 2) {
+                let nameInput = $tr.find('.gpa-custom-name-input');
+                return nameInput.length ? nameInput.val().trim() : $(tds[2]).text().trim();
+            }
+            if (colIndex === 3) {
+                let creditInput = $tr.find('.gpa-custom-credit-input');
+                let val = creditInput.length ? creditInput.val().trim() : $(tds[3]).text().trim();
+                let num = parseFloat(val);
+                return !isNaN(num) ? num : 0;
+            }
+            if (colIndex === 6) {
+                let scoreInput = $tr.find('.gpa-score-input');
+                let val = scoreInput.length ? scoreInput.val().trim().replace(',', '.') : $(tds[6]).text().trim().replace(',', '.');
+                let num = parseFloat(val);
+                return !isNaN(num) ? num : -1;
+            }
+            if (colIndex === 7) {
+                return $tr.find('.gpa-letter-col').text().trim() || $(tds[7]).text().trim();
+            }
+            if (colIndex === 8) {
+                let fourCol = $tr.find('.gpa-four-col');
+                let val = fourCol.length ? fourCol.text().trim().replace(',', '.') : $(tds[8]).text().trim().replace(',', '.');
+                let num = parseFloat(val);
+                return !isNaN(num) ? num : -1;
+            }
+            return $(tds[colIndex]).text().trim();
+        }
+
         // Custom DataTables 1.9 Numeric Sorter for Score Inputs (Reads Live DOM)
         try {
             $.fn.dataTableExt.oSort['gpa-score-asc'] = function (a, b) {
@@ -1390,15 +1444,38 @@
                 { "sWidth": '50%', "aTargets": [2] },
                 { "sType": "gpa-score", "aTargets": [6, 8] },
                 { "sType": "numeric", "aTargets": [3] }
-            ]
+            ],
+            "fnDrawCallback": function (oSettings) {
+                renderCustomCoursesInTable();
+
+                if (oSettings && oSettings.aaSorting && oSettings.aaSorting.length > 0) {
+                    let sortCol = oSettings.aaSorting[0][0];
+                    let sortDir = oSettings.aaSorting[0][1];
+
+                    let rows = tab.find('tbody tr').get();
+                    rows.sort(function (a, b) {
+                        let valA = getRowSortValue(a, sortCol);
+                        let valB = getRowSortValue(b, sortCol);
+                        let comp = 0;
+                        if (typeof valA === 'number' && typeof valB === 'number') {
+                            comp = valA - valB;
+                        } else {
+                            comp = String(valA).localeCompare(String(valB), 'vi', { numeric: true, sensitivity: 'base' });
+                        }
+                        return sortDir === 'asc' ? comp : -comp;
+                    });
+
+                    let tbody = tab.find('tbody');
+                    $.each(rows, function (idx, row) {
+                        tbody.append(row);
+                    });
+                    tab.find('tbody tr').each(function (idx) {
+                        $(this).removeClass('odd even').addClass(idx % 2 === 0 ? 'odd' : 'even');
+                    });
+                }
+            }
         });
         tab.css({ 'width': '100%', 'margin': '0' });
-
-        // Ensure custom course rows stay at the bottom of tbody below official portal courses
-        let customRows = tab.find('tbody tr.gpa-custom-row').detach();
-        if (customRows.length) {
-            tab.find('tbody').append(customRows);
-        }
 
 
 
@@ -1656,7 +1733,7 @@
             $(resetButton).insertAfter(pdfButton);
             $(resetButton).click(function (event) {
                 event.preventDefault();
-                
+
                 if (isAllSemestersMode()) {
                     localStorage.removeItem('gpa_saved_custom_courses');
                     localStorage.removeItem('gpa_saved_edited_scores');
@@ -1696,7 +1773,7 @@
                             }
                         });
                         localStorage.setItem('gpa_saved_edited_scores', JSON.stringify(keptScores));
-                        
+
                         // Sync memory
                         if (window._gpaSavedEditedScores) {
                             Object.keys(window._gpaSavedEditedScores).forEach(k => {
