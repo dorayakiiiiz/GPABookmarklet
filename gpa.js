@@ -1744,6 +1744,9 @@ javascript: (function gpa() {
                     $(restoreButton).attr("style", "width: 17%; display: inline-block; margin-bottom: 10px;");
                     $($(restoreButton).find(".ob_iBC")[0]).text("Khôi phục lịch sử");
                     $(restoreButton).insertAfter(resetButton);
+                    if ($('#gpaCustomAddPanel')[0]) {
+                        $('#gpaCustomAddPanel').insertAfter(restoreButton);
+                    }
                     $(restoreButton).click(function (event) {
                         event.preventDefault();
                         restoreGpaSimulationData();
@@ -1760,6 +1763,9 @@ javascript: (function gpa() {
                 $(restoreButton).attr("style", "width: 17%; display: inline-block; margin-bottom: 10px;");
                 $($(restoreButton).find(".ob_iBC")[0]).text("Khôi phục lịch sử");
                 $(restoreButton).insertAfter(resetButton);
+                if ($('#gpaCustomAddPanel')[0]) {
+                    $('#gpaCustomAddPanel').insertAfter(restoreButton);
+                }
                 $(restoreButton).click(function (event) {
                     event.preventDefault();
                     restoreGpaSimulationData();
@@ -1873,7 +1879,8 @@ javascript: (function gpa() {
                     '</div>' +
                     '</div>';
                 let panelEl = $(panelHtml);
-                panelEl.insertAfter(resetButton);
+                let panelTarget = $('#restoreGpaHistory')[0] ? $('#restoreGpaHistory') : resetButton;
+                panelEl.insertAfter(panelTarget);
 
                 let btnSubmit = $('#ob_iBbtnXemDiemThiContainer').clone().attr("id", "gpaBtnSubmitCustomCourse");
                 $(btnSubmit).attr("style", "display: inline-block; margin-right: 5px;");
