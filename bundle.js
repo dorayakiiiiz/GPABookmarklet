@@ -1534,27 +1534,161 @@
                 let exportCal = cal;
                 if (!exportCal) return;
 
-                let csv = 'Tên môn học, Số tín chỉ, Điểm, Điểm chữ, Điểm 4, Học kỳ, Lớp, Ghi chú\n';
+                let rawUserText = $('#user_tools span').text() || $('#user_tools').text() || "";
+                let studentName = "TRÀ VĂN SỸ";
+                if (rawUserText.includes("Xin chào")) {
+                    let match = rawUserText.match(/Xin\s+chào\s+([^|]+)/i);
+                    if (match && match[1]) {
+                        studentName = match[1].trim();
+                    }
+                }
+
+                let degInfo = getDegreeInfo(exportCal.gpa);
+                const now = new Date();
+                const dateStr = 'Ngày ' + now.getDate() + ' tháng ' + (now.getMonth() + 1) + ' năm ' + now.getFullYear();
+
+                let scopeText = "Tất cả";
+                if (!isAllSemestersMode()) {
+                    let yearInput = ($('#ctl00_ContentPlaceHolder1_ctl00_cboNamHoc_gvDKHPLichThi_ob_CbocboNamHoc_gvDKHPLichThiTB').val() || "").trim();
+                    let hkInput = ($('#ctl00_ContentPlaceHolder1_ctl00_cboHocKy_gvDKHPLichThi_ob_CbocboHocKy_gvDKHPLichThiTB').val() || "").trim();
+                    scopeText = "Học kỳ " + hkInput + " - Năm học " + yearInput;
+                } else if (selectedAcademicYears && selectedAcademicYears.length > 0) {
+                    scopeText = "Năm học " + selectedAcademicYears.join(', ');
+                }
+
+                let rowsHtml = '';
+                let stt = 1;
                 exportData.forEach(function (row) {
                     if (row.include) {
-                        csv += row.course + ', ' + row.credit + ', ' + row.score + ', ' + row.letter + ', ' + row.fourRounding + ', ' + row.semester + ', ' + row.class + ', ' + row.note + '\n';
+                        let scoreVal = (row.score > 0 || (!row.isAbsent && !row.isNoScore)) ? toFixed(row.score) : "-";
+                        let letterVal = row.letter || "-";
+                        let fourVal = row.fourRounding ? toFixed(row.fourRounding) : "-";
+
+                        let courseParts = row.course.split(' - ');
+                        let courseCode = courseParts.length > 1 ? courseParts[0].trim() : (row.ldcode || '');
+                        let courseName = courseParts.length > 1 ? courseParts.slice(1).join(' - ').trim() : row.course;
+
+                        rowsHtml += '<tr height="40" style="height: 40px;">' +
+                            '<td></td>' +
+                            '<td style="border: 1px solid #000; text-align: center; vertical-align: middle; mso-number-format:\'\\@\';">' + stt++ + '</td>' +
+                            '<td style="border: 1px solid #000; text-align: center; vertical-align: middle; mso-number-format:\'\\@\';">' + courseCode + '</td>' +
+                            '<td style="border: 1px solid #000; text-align: left; vertical-align: middle; padding-left: 8px;">' + courseName + '</td>' +
+                            '<td style="border: 1px solid #000; text-align: center; vertical-align: middle;">' + row.credit + '</td>' +
+                            '<td style="border: 1px solid #000; text-align: center; vertical-align: middle;">' + scoreVal + '</td>' +
+                            '<td style="border: 1px solid #000; text-align: center; vertical-align: middle;">' + fourVal + '</td>' +
+                            '<td style="border: 1px solid #000; text-align: center; vertical-align: middle;">' + letterVal + '</td>' +
+                            '</tr>';
                     }
                 });
 
-                let totalExportCourses = (exportCal.activeCoursesCount !== undefined ? exportCal.activeCoursesCount : exportData.length);
-                csv += "Điểm trung bình tích lũy (GPA): " + toFixed(exportCal.gpa) + "\n";
-                csv += "Điểm trung bình tích lũy (GPA) hệ 4: " + toFixed(exportCal.fourGPA) + "\n";
-                csv += "Điểm trung bình học tập: " + toFixed(exportCal.notPassGPA) + "\n";
-                csv += "Số tín chỉ tích lũy: " + exportCal.totalCredits + "\n";
-                csv += "Tổng điểm tích lũy: " + toFixed(exportCal.totalScores) + "\n";
-                csv += "Tổng học phần: " + totalExportCourses + "\n";
-                csv += "Tổng học phần trong GPA: " + (totalExportCourses - exportCal.removedCoursesSize) + "\n";
+                let excelHtml = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">' +
+                    '<head><meta charset="utf-8" />' +
+                    '<!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>BangDiem</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]-->' +
+                    '<style>' +
+                    'body, table, td, th { font-family: "Times New Roman", Times, serif; font-size: 11pt; color: #000; }' +
+                    'table { border-collapse: collapse; width: 100%; }' +
+                    'th, td { padding: 5px 8px; }' +
+                    '</style>' +
+                    '</head>' +
+                    '<body>' +
+                    '<table>' +
+                    '<colgroup>' +
+                    '  <col width="30" style="width: 30px;">' +
+                    '  <col width="50" style="width: 50px;">' +
+                    '  <col width="95" style="width: 95px;">' +
+                    '  <col width="320" style="width: 320px;">' +
+                    '  <col width="75" style="width: 75px;">' +
+                    '  <col width="95" style="width: 95px;">' +
+                    '  <col width="95" style="width: 95px;">' +
+                    '  <col width="95" style="width: 95px;">' +
+                    '</colgroup>' +
+                    '<tr height="30" style="height: 30px;">' +
+                    '<td></td>' +
+                    '<td colspan="3" style="text-align: center; font-size: 10pt; font-weight: bold; white-space: nowrap; vertical-align: middle;">ĐẠI HỌC QUỐC GIA TP.HỒ CHÍ MINH</td>' +
+                    '<td colspan="4" style="text-align: center; font-size: 10pt; font-weight: bold; white-space: nowrap; vertical-align: middle;">CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM</td>' +
+                    '</tr>' +
+                    '<tr height="30" style="height: 30px;">' +
+                    '<td></td>' +
+                    '<td colspan="3" style="text-align: center; font-size: 10pt; font-weight: bold; white-space: nowrap; vertical-align: middle;">TRƯỜNG ĐẠI HỌC KHOA HỌC TỰ NHIÊN</td>' +
+                    '<td colspan="4" style="text-align: center; font-size: 10pt; font-weight: bold; white-space: nowrap; vertical-align: middle;">Độc lập - Tự do - Hạnh phúc</td>' +
+                    '</tr>' +
+                    '<tr height="24" style="height: 24px;"><td colspan="8">&nbsp;</td></tr>' +
+                    '<tr height="48" style="height: 48px;">' +
+                    '<td></td>' +
+                    '<td colspan="7" style="text-align: center; font-size: 16pt; font-weight: bold; vertical-align: middle; white-space: nowrap;">BẢNG ĐIỂM HỌC TẬP</td>' +
+                    '</tr>' +
+                    '<tr height="24" style="height: 24px;"><td colspan="8">&nbsp;</td></tr>' +
+                    '<tr height="32" style="height: 32px;">' +
+                    '<td></td>' +
+                    '<td colspan="3" style="font-size: 11pt; white-space: nowrap; vertical-align: middle;"><b>Họ và tên sinh viên:</b> ' + studentName + '</td>' +
+                    '<td colspan="4" style="font-size: 11pt; white-space: nowrap; vertical-align: middle;"><b>Trình độ đào tạo:</b> Đại học chính quy</td>' +
+                    '</tr>' +
+                    '<tr height="32" style="height: 32px;">' +
+                    '<td></td>' +
+                    '<td colspan="3" style="font-size: 11pt; white-space: nowrap; vertical-align: middle;"><b>Trạng thái:</b> Đang học</td>' +
+                    '<td colspan="4" style="font-size: 11pt; white-space: nowrap; vertical-align: middle;"><b>Năm học:</b> ' + scopeText + '</td>' +
+                    '</tr>' +
+                    '<tr height="24" style="height: 24px;"><td colspan="8">&nbsp;</td></tr>' +
+                    '<thead>' +
+                    '<tr height="40" style="height: 40px;">' +
+                    '<th style="border: none; background: transparent;"></th>' +
+                    '<th style="border: 1px solid #000; background-color: #f2f2f2; text-align: center; width: 50px; vertical-align: middle;">STT</th>' +
+                    '<th style="border: 1px solid #000; background-color: #f2f2f2; text-align: center; width: 95px; vertical-align: middle;">Mã HP</th>' +
+                    '<th style="border: 1px solid #000; background-color: #f2f2f2; text-align: left; width: 320px; vertical-align: middle; padding-left: 8px;">Tên học phần</th>' +
+                    '<th style="border: 1px solid #000; background-color: #f2f2f2; text-align: center; width: 75px; vertical-align: middle;">Số TC</th>' +
+                    '<th style="border: 1px solid #000; background-color: #f2f2f2; text-align: center; width: 95px; vertical-align: middle;">Thang 10</th>' +
+                    '<th style="border: 1px solid #000; background-color: #f2f2f2; text-align: center; width: 95px; vertical-align: middle;">Thang 4</th>' +
+                    '<th style="border: 1px solid #000; background-color: #f2f2f2; text-align: center; width: 95px; vertical-align: middle;">Điểm chữ</th>' +
+                    '</tr>' +
+                    '</thead>' +
+                    '<tbody>' + rowsHtml + '</tbody>' +
+                    '<tr height="24" style="height: 24px;"><td colspan="8">&nbsp;</td></tr>' +
+                    '<tr height="32" style="height: 32px;">' +
+                    '<td></td>' +
+                    '<td colspan="3" style="font-size: 11pt; white-space: nowrap; vertical-align: middle;"><b>Điểm trung bình tích lũy (thang 10):</b> ' + toFixed(exportCal.gpa) + '</td>' +
+                    '<td colspan="4" style="font-size: 11pt; white-space: nowrap; vertical-align: middle;"><b>Tổng số tín chỉ tích lũy:</b> ' + exportCal.totalCredits + ' tín chỉ</td>' +
+                    '</tr>' +
+                    '<tr height="32" style="height: 32px;">' +
+                    '<td></td>' +
+                    '<td colspan="3" style="font-size: 11pt; white-space: nowrap; vertical-align: middle;"><b>Điểm trung bình tích lũy (thang 4):</b> ' + toFixed(exportCal.fourGPA) + '</td>' +
+                    '<td colspan="4" style="font-size: 11pt; white-space: nowrap; vertical-align: middle;"><b>Xếp loại học lực tích lũy:</b> ' + degInfo.name + '</td>' +
+                    '</tr>' +
+                    '<tr height="24" style="height: 24px;"><td colspan="8">&nbsp;</td></tr>' +
+                    '<tr height="32" style="height: 32px;">' +
+                    '<td></td>' +
+                    '<td colspan="3"></td>' +
+                    '<td colspan="4" style="text-align: center; font-style: italic; font-size: 11pt; white-space: nowrap; vertical-align: middle;">TP. Hồ Chí Minh, ' + dateStr + '</td>' +
+                    '</tr>' +
+                    '<tr height="32" style="height: 32px;">' +
+                    '<td></td>' +
+                    '<td colspan="3"></td>' +
+                    '<td colspan="4" style="text-align: center; font-weight: bold; font-size: 11pt; white-space: nowrap; vertical-align: middle;">NGƯỜI LẬP BẢNG ĐIỂM</td>' +
+                    '</tr>' +
+                    '<tr height="70" style="height: 70px;"><td colspan="8"></td></tr>' +
+                    '<tr height="32" style="height: 32px;">' +
+                    '<td></td>' +
+                    '<td colspan="3"></td>' +
+                    '<td colspan="4" style="text-align: center; font-weight: bold; font-size: 11pt; white-space: nowrap; vertical-align: middle;">' + studentName + '</td>' +
+                    '</tr>' +
+                    '<tr height="24" style="height: 24px;"><td colspan="8">&nbsp;</td></tr>' +
+                    '<tr height="30" style="height: 30px;">' +
+                    '<td></td>' +
+                    '<td colspan="7" style="font-size: 10pt; font-style: italic; color: #444; vertical-align: middle;">(*): Bảng điểm này không thay thế bảng điểm chính thức từ Phòng đào tạo.</td>' +
+                    '</tr>' +
+                    '</table>' +
+                    '</body></html>';
 
+                let blob = new Blob(['\uFEFF' + excelHtml], { type: 'application/vnd.ms-excel;charset=utf-8' });
+                let url = URL.createObjectURL(blob);
                 let hiddenElement = document.createElement('a');
-                hiddenElement.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent('\uFEFF' + csv);
-                hiddenElement.target = '_blank';
-                hiddenElement.download = 'GPA.csv';
+                hiddenElement.href = url;
+                hiddenElement.download = 'BangDiem_' + studentName.replace(/\s+/g, '_') + '.xls';
+                document.body.appendChild(hiddenElement);
                 hiddenElement.click();
+                setTimeout(() => {
+                    document.body.removeChild(hiddenElement);
+                    URL.revokeObjectURL(url);
+                }, 100);
             }
         }
 
@@ -1940,7 +2074,7 @@
 
             let saveButton = $('#ob_iBbtnXemDiemThiContainer').clone().attr("id", "saveCoursesList");
             $(saveButton).attr("style", "width: 19%; display: inline-block; margin-right: 8px; margin-bottom: 10px;");
-            $($(saveButton).find(".ob_iBC")[0]).text("Xuất bảng điểm (CSV)");
+            $($(saveButton).find(".ob_iBC")[0]).text("Xuất bảng điểm (Excel)");
             $(saveButton).insertAfter('#btnAddCustomRow');
             $(saveButton).click(function (event) {
                 event.preventDefault();

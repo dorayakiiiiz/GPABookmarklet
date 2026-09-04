@@ -306,7 +306,7 @@ body {
 /* Action Links */
 .links-row {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(2, 1fr);
     gap: 8px;
     border-top: 2px solid var(--primary);
     padding-top: 10px;
@@ -342,7 +342,7 @@ body {
 /* Footer Credits */
 .footer-credits {
     text-align: center;
-    font-size: 11px;
+    font-size: 12px;
     color: var(--text-muted);
     border-top: 1px dashed var(--border);
     padding-top: 8px;
@@ -355,8 +355,24 @@ body {
     font-weight: 600;
 }
 
+.footer-credits .new-author {
+    color: rgb(246, 54, 54);
+    font-weight: 700;
+}
+
 .footer-credits a:hover {
     text-decoration: underline;
+}
+
+.footer-credits a.legacy-note-link {
+    color: var(--text-muted);
+    font-weight: 700;
+    font-size: 12px;
+}
+
+.footer-credits a.legacy-note-link:hover {
+    opacity: 1;
+    color: var(--primary);
 }
 
 @media (max-width: 640px) {
