@@ -166,7 +166,7 @@ javascript: (function ketQuaDkhpModule() {
                 });
             }
 
-            if ($('#tbSVKQ tbody tr').length) {
+            if (courses.length === 0 && $('#tbSVKQ tbody tr').length) {
                 $('#tbSVKQ tbody tr').each(function () {
                     let tds = $(this).find('td');
                     if (tds.length < 6) return;
