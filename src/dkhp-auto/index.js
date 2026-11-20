@@ -1,7 +1,7 @@
 (function () {
     window._initAutoDangKyHocPhan = function () {
-        const portalReg = /(new-)?portal\d*\.hcmus\.edu\.vn/i;
-        if (!window.location.hostname.match(portalReg) || !window.location.href.includes("DangKyHocPhan.aspx")) {
+        const { PORTAL_HOST_REG } = __HCMUS__.constants;
+        if (!window.location.hostname.match(PORTAL_HOST_REG) || !window.location.href.includes("DangKyHocPhan.aspx")) {
             alert("Vui lòng sử dụng Tool tại trang \"Đăng ký học phần\" (DangKyHocPhan.aspx) sau khi đã đăng nhập và nhập Captcha!");
             return;
         }
