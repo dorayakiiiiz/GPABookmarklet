@@ -1,8 +1,14 @@
-(function ketQuaDkhpModule() {
+(function () {
     window._initKetQuaDkhp = function () {
-        const { PORTAL_HOST_REG, COURSE_PALETTES } = __HCMUS__.constants;
+        const { PORTAL_HOST_REG, PORTAL_LAYOUT_FIX_CSS, COURSE_PALETTES } = __HCMUS__.constants;
         const { parseSchedule, getCampus, getScheduleMinutes } = __HCMUS__.schedule;
-        const { renderShiftViewBody, renderPeriodViewBody } = __HCMUS__.timetableGrid;
+        const {
+            analyzeCampusAndShiftMode,
+            getShiftCardMeta,
+            buildSessionDefinitions,
+            renderShiftViewBody,
+            renderPeriodViewBody
+        } = __HCMUS__.timetableGrid;
 
         if (!window.location.hostname.match(PORTAL_HOST_REG)) {
             alert("Vui lòng sử dụng Tool trên website HCMUS Portal!");
@@ -20,7 +26,7 @@
         if (!tabApproved.length && !tabRegistered.length) return;
 
         // Fix layout widths
-        $('<style>#page-body{display:flex!important;align-items:stretch!important}#page-body-menu{height:auto!important;min-height:100%!important;flex-shrink:0!important}#page-body-content{flex-grow:1!important;min-width:0!important}#tbPDTKQ, #tbSVKQ{width:100%!important;margin:0!important}.ob_iBOv{display:none!important}</style>').appendTo('head');
+        $('<style>' + PORTAL_LAYOUT_FIX_CSS + '#tbPDTKQ, #tbSVKQ{width:100%!important;margin:0!important}.ob_iBOv{display:none!important}</style>').appendTo('head');
 
         // Interval overlap check function between two items
         function checkConflict(itemA, itemB) {
@@ -183,7 +189,6 @@
 
             $(document).off('change', '#gpaTkbShiftViewCb');
             $(document).on('change', '#gpaTkbShiftViewCb', function () {
-                window._gpaTkbShiftViewManual = true;
                 window._gpaTkbShiftView = $(this).is(':checked');
                 renderTkbPanel();
             });
@@ -199,41 +204,10 @@
             });
 
             // Detect campus mix & period 6 overlap on same day
-            let campusSet = new Set();
-            let dayP6Map = {};
-            courses.forEach(item => {
-                let scheds = parseSchedule(item.scheduleStr);
-                scheds.forEach(s => {
-                    let campus = getCampus(s, item);
-                    campusSet.add(campus);
-
-                    let d = s.dayNum;
-                    if (!dayP6Map[d]) dayP6Map[d] = { cs1: false, cs2: false };
-                    if (campus === 'cs1' && s.startPeriod <= 6 && s.endPeriod >= 6) {
-                        dayP6Map[d].cs1 = true;
-                    }
-                    if (campus === 'cs2' && s.startPeriod <= 6 && s.endPeriod >= 6) {
-                        dayP6Map[d].cs2 = true;
-                    }
-                });
-            });
-
-            let isMixedCampus = campusSet.has('cs1') && campusSet.has('cs2');
-            let isP6Overlap = false;
-            for (let d in dayP6Map) {
-                if (dayP6Map[d].cs1 && dayP6Map[d].cs2) {
-                    isP6Overlap = true;
-                    break;
-                }
-            }
-
-            if (!window._hadP6Overlap && isP6Overlap) {
-                window._gpaTkbShiftView = true;
-            }
-
-            window._hadP6Overlap = isP6Overlap;
-
-            let isShiftView = !!window._gpaTkbShiftView;
+            const { campusSet, isMixedCampus, isShiftView } = analyzeCampusAndShiftMode(
+                courses,
+                item => parseSchedule(item.scheduleStr)
+            );
 
             // Sync checkbox checked property in DOM
             $('#gpaTkbShiftViewCb').prop('checked', isShiftView);
@@ -263,21 +237,8 @@
                     schedules.forEach(s => {
                         if (s.dayNum < 2 || s.dayNum > 7) return;
                         let campus = getCampus(s, item);
-                        let time = getScheduleMinutes(s, campus);
-                        let sessionKey = 'morning';
-                        if (time.startMin >= 1080) {
-                            sessionKey = 'evening';
-                            hasEveningClass = true;
-                        } else if (time.startMin >= 750) {
-                            sessionKey = 'afternoon';
-                        }
-
-                        let periodSpan = Math.max(1, (s.endPeriod - s.startPeriod + 1));
-                        let isHalf = periodSpan <= 3.5;
-                        let midPeriod = (campus === 'cs1')
-                            ? (sessionKey === 'morning' ? 3.5 : (sessionKey === 'afternoon' ? 9.5 : 14.5))
-                            : (sessionKey === 'morning' ? 3 : (sessionKey === 'afternoon' ? 8 : 13));
-                        let isBottomHalf = s.startPeriod >= midPeriod;
+                        let { time, sessionKey, isHalf, isBottomHalf } = getShiftCardMeta(s, campus);
+                        if (sessionKey === 'evening') hasEveningClass = true;
 
                         sessionMap[s.dayNum][sessionKey].push({
                             courseName: item.courseName,
@@ -296,30 +257,7 @@
                     });
                 });
 
-                let hasCS1 = campusSet.has('cs1');
-                let hasCS2 = campusSet.has('cs2');
-
-                let morningRange = '07g30 - 11g50';
-                let afternoonRange = '12g40 - 17g00';
-                let eveningRange = '17g30 - 20g00';
-
-                if (hasCS1 && hasCS2) {
-                    morningRange = '07g00 - 12g10';
-                    afternoonRange = '12g40 - 18g00';
-                    eveningRange = '17g30 - 20g30';
-                } else if (hasCS1) {
-                    morningRange = '07g00 - 12g10';
-                    afternoonRange = '12g50 - 18g00';
-                    eveningRange = '18g00 - 20g30';
-                }
-
-                let sessions = [
-                    { key: 'morning', label: 'Buổi sáng', timeLabel: morningRange },
-                    { key: 'afternoon', label: 'Buổi chiều', timeLabel: afternoonRange }
-                ];
-                if (hasEveningClass) {
-                    sessions.push({ key: 'evening', label: 'Buổi Tối', timeLabel: eveningRange });
-                }
+                let sessions = buildSessionDefinitions(campusSet, hasEveningClass);
 
                 tbodyHtml = renderShiftViewBody({
                     sessionMap,

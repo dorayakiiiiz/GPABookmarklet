@@ -1,4 +1,4 @@
-(function mainRouter() {
+(function () {
     const { PORTAL_HOST_REG } = __HCMUS__.constants;
     if (!window.location.hostname.match(PORTAL_HOST_REG)) {
         alert("Vui lòng truy cập trang \"Tra cứu kết quả học tập\", \"Danh sách lớp mở\", \"Kết quả ĐKHP\" hoặc \"Đăng ký học phần\" trên Portal HCMUS để dùng Tool nhé!");

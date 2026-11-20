@@ -1,4 +1,96 @@
 (function () {
+    function analyzeCampusAndShiftMode(items, getSchedulesFn) {
+        const { getCampus } = __HCMUS__.schedule;
+        let campusSet = new Set();
+        let dayP6Map = {};
+
+        items.forEach(item => {
+            let scheds = getSchedulesFn(item);
+            scheds.forEach(s => {
+                let campus = getCampus(s, item);
+                campusSet.add(campus);
+
+                let d = s.dayNum;
+                if (!dayP6Map[d]) dayP6Map[d] = { cs1: false, cs2: false };
+                if (campus === 'cs1' && s.startPeriod <= 6 && s.endPeriod >= 6) {
+                    dayP6Map[d].cs1 = true;
+                }
+                if (campus === 'cs2' && s.startPeriod <= 6 && s.endPeriod >= 6) {
+                    dayP6Map[d].cs2 = true;
+                }
+            });
+        });
+
+        let isMixedCampus = campusSet.has('cs1') && campusSet.has('cs2');
+        let isP6Overlap = false;
+        for (let d in dayP6Map) {
+            if (dayP6Map[d].cs1 && dayP6Map[d].cs2) {
+                isP6Overlap = true;
+                break;
+            }
+        }
+
+        // Auto-switch to Shift View ONLY when transitioning into a NEW Period 6 overlap
+        if (!window._hadP6Overlap && isP6Overlap) {
+            window._gpaTkbShiftView = true;
+        }
+        window._hadP6Overlap = isP6Overlap;
+
+        return {
+            campusSet,
+            isMixedCampus,
+            isShiftView: !!window._gpaTkbShiftView
+        };
+    }
+
+    function getShiftCardMeta(s, campus) {
+        const { getScheduleMinutes } = __HCMUS__.schedule;
+        let time = getScheduleMinutes(s, campus);
+        let sessionKey = 'morning';
+        if (time.startMin >= 1080) {
+            sessionKey = 'evening';
+        } else if (time.startMin >= 750) {
+            sessionKey = 'afternoon';
+        }
+
+        let periodSpan = Math.max(1, (s.endPeriod - s.startPeriod + 1));
+        let isHalf = periodSpan <= 3.5;
+        let midPeriod = (campus === 'cs1')
+            ? (sessionKey === 'morning' ? 3.5 : (sessionKey === 'afternoon' ? 9.5 : 14.5))
+            : (sessionKey === 'morning' ? 3 : (sessionKey === 'afternoon' ? 8 : 13));
+        let isBottomHalf = s.startPeriod >= midPeriod;
+
+        return { time, sessionKey, isHalf, isBottomHalf };
+    }
+
+    function buildSessionDefinitions(campusSet, hasEveningClass) {
+        let hasCS1 = campusSet.has('cs1');
+        let hasCS2 = campusSet.has('cs2');
+
+        let morningRange = '07g30 - 11g50';
+        let afternoonRange = '12g40 - 17g00';
+        let eveningRange = '17g30 - 20g00';
+
+        if (hasCS1 && hasCS2) {
+            morningRange = '07g00 - 12g10';
+            afternoonRange = '12g40 - 18g00';
+            eveningRange = '17g30 - 20g30';
+        } else if (hasCS1) {
+            morningRange = '07g00 - 12g10';
+            afternoonRange = '12g50 - 18g00';
+            eveningRange = '18g00 - 20g30';
+        }
+
+        let sessions = [
+            { key: 'morning', label: 'Buổi sáng', timeLabel: morningRange },
+            { key: 'afternoon', label: 'Buổi chiều', timeLabel: afternoonRange }
+        ];
+        if (hasEveningClass) {
+            sessions.push({ key: 'evening', label: 'Buổi Tối', timeLabel: eveningRange });
+        }
+        return sessions;
+    }
+
     function renderShiftViewBody({ sessionMap, sessions, isMixedCampus, showTuanBD }) {
         const { minutesToHHMM } = __HCMUS__.schedule;
 
@@ -45,13 +137,12 @@
                             let campusPrefix = isMixedCampus ? (cData.campus === 'cs1' ? '[NVC] ' : '[LT] ') : '';
                             let periodText = `Tiết ${cData.startPeriod}-${cData.endPeriod}`;
                             let timeStr = `${minutesToHHMM(cData.startMin)}-${minutesToHHMM(cData.endMin)}`;
-                            let tuanText = '';
 
                             let cardHtml = `
                             <div class="tkb-session-card" style="background: ${cData.palette.bg}; color: ${cData.palette.text}; vertical-align: middle; padding: 4px 3px; font-size: 13px; text-align: center; line-height: 1.25; word-wrap: break-word; overflow-wrap: break-word; word-break: break-word; margin: 2px 0; border-radius: 3px; box-sizing: border-box;">
                                 <div>${cData.courseName}</div>
                                 <div style="font-size: 12px; opacity: 0.95;">(${cData.className})</div>
-                                <div style="color: ${cData.palette.roomText}; font-size: 11.5px; line-height: 1.15; margin-top: 1px;">${campusPrefix}${cData.room}${tuanText}</div>
+                                <div style="color: ${cData.palette.roomText}; font-size: 11.5px; line-height: 1.15; margin-top: 1px;">${campusPrefix}${cData.room}</div>
                                 <div style="color: ${cData.palette.text}; font-size: 11.5px; line-height: 1.15; margin-top: 1px;">${periodText} (${timeStr})</div>
                             </div>`;
 
@@ -184,6 +275,9 @@
     }
 
     __HCMUS__.timetableGrid = {
+        analyzeCampusAndShiftMode,
+        getShiftCardMeta,
+        buildSessionDefinitions,
         renderShiftViewBody,
         renderPeriodViewBody
     };

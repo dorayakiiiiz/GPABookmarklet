@@ -1,6 +1,6 @@
-(function gpa() {
+(function () {
     window._initGpaCalculator = function () {
-        const { PORTAL_HOST_REG } = __HCMUS__.constants;
+        const { PORTAL_HOST_REG, PORTAL_LAYOUT_FIX_CSS } = __HCMUS__.constants;
         const {
             getSelectedYearAndHk,
             isAllSemestersMode,
@@ -43,7 +43,7 @@
         if (!tab.length) return;
 
         // Fix Left Navbar White Gap on Scroll & Fix Table Side Indentation & Align Toolbar & Search
-        $('<style>#page-body{display:flex!important;align-items:stretch!important}#page-body-menu{height:auto!important;min-height:100%!important;flex-shrink:0!important}#page-body-content{flex-grow:1!important;min-width:0!important}#tbDiemThiGK{width:100%!important;margin:0!important}.gpa-custom-name-input{text-align:left!important}.gpa-custom-name-input::placeholder,.gpa-custom-sem-input::placeholder,.gpa-custom-credit-input::placeholder,.gpa-score-input::placeholder{text-align:center!important}#tbDiemThiGK_wrapper .fg-toolbar:first-child{display:flex!important;align-items:center!important;justify-content:space-between!important}#tbDiemThiGK_wrapper .fg-toolbar:first-child:before,#tbDiemThiGK_wrapper .fg-toolbar:first-child:after{display:none!important}#gpaYearFilterWrapper{display:inline-flex!important;align-items:center!important;float:none!important;margin:0!important}#tbDiemThiGK_filter{float:none!important;display:inline-flex!important;align-items:center!important;margin:0 0 0 auto!important}#tbDiemThiGK_filter label{display:inline-flex!important;align-items:center!important;margin:0!important;float:none!important}#tbDiemThiGK_filter input{margin-left:5px!important;vertical-align:middle!important}</style>').appendTo('head');
+        $('<style>' + PORTAL_LAYOUT_FIX_CSS + '#tbDiemThiGK{width:100%!important;margin:0!important}.gpa-custom-name-input{text-align:left!important}.gpa-custom-name-input::placeholder,.gpa-custom-sem-input::placeholder,.gpa-custom-credit-input::placeholder,.gpa-score-input::placeholder{text-align:center!important}#tbDiemThiGK_wrapper .fg-toolbar:first-child{display:flex!important;align-items:center!important;justify-content:space-between!important}#tbDiemThiGK_wrapper .fg-toolbar:first-child:before,#tbDiemThiGK_wrapper .fg-toolbar:first-child:after{display:none!important}#gpaYearFilterWrapper{display:inline-flex!important;align-items:center!important;float:none!important;margin:0!important}#tbDiemThiGK_filter{float:none!important;display:inline-flex!important;align-items:center!important;margin:0 0 0 auto!important}#tbDiemThiGK_filter label{display:inline-flex!important;align-items:center!important;margin:0!important;float:none!important}#tbDiemThiGK_filter input{margin-left:5px!important;vertical-align:middle!important}</style>').appendTo('head');
 
         const state = {
             tab: tab,
@@ -455,6 +455,23 @@
             $(resetButton).attr("style", "width: 11%; display: inline-block; margin-right: 8px; margin-bottom: 10px;");
             $($(resetButton).find(".ob_iBC")[0]).text("Reset");
             $(resetButton).insertAfter(pdfButton);
+            function renderRestoreHistoryButton() {
+                if (hasRestorableData() && !$('#restoreGpaHistory')[0]) {
+                    let restoreButton = $('#ob_iBbtnXemDiemThiContainer').clone().attr("id", "restoreGpaHistory");
+                    $(restoreButton).attr("style", "width: 17%; display: inline-block; margin-bottom: 10px;");
+                    $($(restoreButton).find(".ob_iBC")[0]).text("Khôi phục lịch sử");
+                    $(restoreButton).insertAfter(resetButton);
+                    if ($('#gpaCustomAddPanel')[0]) {
+                        $('#gpaCustomAddPanel').insertAfter(restoreButton);
+                    }
+                    $(restoreButton).click(function (event) {
+                        event.preventDefault();
+                        restoreGpaSimulationData(state, refreshAllDataAndUI);
+                        $(this).css({ 'opacity': '0.5', 'cursor': 'not-allowed' }).off('click').click(e => e.preventDefault());
+                    });
+                }
+            }
+
             $(resetButton).click(function (event) {
                 event.preventDefault();
 
@@ -470,15 +487,8 @@
                         setupYearFilterDropdown(state);
                     }
                 } else {
-                    let yearInput = ($('#ctl00_ContentPlaceHolder1_ctl00_cboNamHoc_gvDKHPLichThi_ob_CbocboNamHoc_gvDKHPLichThiTB').val() || "").trim().toLowerCase();
-                    if (!yearInput || yearInput === "0") {
-                        yearInput = ($('#ctl00_ContentPlaceHolder1_ctl00_cboNamHoc_gvDKHPLichThi').val() || "").trim().toLowerCase();
-                    }
-                    let hkInput = ($('#ctl00_ContentPlaceHolder1_ctl00_cboHocKy_gvDKHPLichThi_ob_CbocboHocKy_gvDKHPLichThiTB').val() || "").trim().toLowerCase();
-                    if (!hkInput) {
-                        hkInput = ($('#ctl00_ContentPlaceHolder1_ctl00_cboHocKy_gvDKHPLichThi').val() || "").trim().toLowerCase();
-                    }
-                    let targetSem = (yearInput + '/' + hkInput).toLowerCase();
+                    let { year, hk } = getSelectedYearAndHk();
+                    let targetSem = (year + '/' + hk).toLowerCase();
                     let prefix = targetSem + "_";
 
                     // 1. Remove custom courses of this semester from LocalStorage & Memory
@@ -545,43 +555,16 @@
 
                 // Show the restore button again if there is restorable data for other semesters or we just cleared
                 $('#restoreGpaHistory').remove();
-                if (hasRestorableData() && !$('#restoreGpaHistory')[0]) {
-                    let restoreButton = $('#ob_iBbtnXemDiemThiContainer').clone().attr("id", "restoreGpaHistory");
-                    $(restoreButton).attr("style", "width: 17%; display: inline-block; margin-bottom: 10px;");
-                    $($(restoreButton).find(".ob_iBC")[0]).text("Khôi phục lịch sử");
-                    $(restoreButton).insertAfter(resetButton);
-                    if ($('#gpaCustomAddPanel')[0]) {
-                        $('#gpaCustomAddPanel').insertAfter(restoreButton);
-                    }
-                    $(restoreButton).click(function (event) {
-                        event.preventDefault();
-                        restoreGpaSimulationData(state, refreshAllDataAndUI);
-                        $(this).css({ 'opacity': '0.5', 'cursor': 'not-allowed' }).off('click').click(e => e.preventDefault());
-                    });
-                }
+                renderRestoreHistoryButton();
 
                 refreshAllDataAndUI();
             });
 
             // Add Restore History button if there is saved data in local storage
-            if (hasRestorableData() && !$('#restoreGpaHistory')[0]) {
-                let restoreButton = $('#ob_iBbtnXemDiemThiContainer').clone().attr("id", "restoreGpaHistory");
-                $(restoreButton).attr("style", "width: 17%; display: inline-block; margin-bottom: 10px;");
-                $($(restoreButton).find(".ob_iBC")[0]).text("Khôi phục lịch sử");
-                $(restoreButton).insertAfter(resetButton);
-                if ($('#gpaCustomAddPanel')[0]) {
-                    $('#gpaCustomAddPanel').insertAfter(restoreButton);
-                }
-                $(restoreButton).click(function (event) {
-                    event.preventDefault();
-                    restoreGpaSimulationData(state, refreshAllDataAndUI);
-                    $(this).css({ 'opacity': '0.5', 'cursor': 'not-allowed' }).off('click').click(e => e.preventDefault());
-                });
-            }
+            renderRestoreHistoryButton();
 
             function generateSemesterSelectOptions() {
-                let yearInput = ($('#ctl00_ContentPlaceHolder1_ctl00_cboNamHoc_gvDKHPLichThi_ob_CbocboNamHoc_gvDKHPLichThiTB').val() || "").trim();
-                let hkInput = ($('#ctl00_ContentPlaceHolder1_ctl00_cboHocKy_gvDKHPLichThi_ob_CbocboHocKy_gvDKHPLichThiTB').val() || "").trim();
+                let { year: yearInput, hk: hkInput } = getSelectedYearAndHk();
 
                 let minFoundYear = 9999;
 
@@ -751,10 +734,9 @@
             window._gpaCustomCoursesList = state.customCoursesList;
             refreshAllDataAndUI();
 
-            // Reset input fields in panel
+            // Reset input fields in panel (keep selected semester)
             $('#gpaNewCourseName').val('');
             $('#gpaNewCourseCredit').val('4');
-            $('#gpaNewCourseSem').val('');
             $('#gpaNewCourseScore').val('');
             $('#gpaNewCourseName').focus();
         });

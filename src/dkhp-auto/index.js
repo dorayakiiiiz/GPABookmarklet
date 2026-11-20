@@ -125,79 +125,48 @@
         let currentTargetTHGroup = '';
         let currentTargetBTGroup = '';
 
-        // Hook TH Modal grid rendering for automatic TH selection & submission
-        const origShowGridTH = window.showGridLopMoThucHanh;
-        window.showGridLopMoThucHanh = function (data, maLopMoTH) {
-            if (typeof origShowGridTH === 'function') {
-                origShowGridTH(data, maLopMoTH);
-            }
-            setTimeout(() => {
-                let $table = $('#tbLopMoThucHanh');
-                if ($table.length) {
-                    let $targetRow = null;
-                    if (currentTargetTHGroup) {
-                        $table.find('tbody tr').each(function () {
-                            let nhomText = $(this).find('td:eq(0)').text().trim();
-                            if (nhomText === currentTargetTHGroup) {
-                                $targetRow = $(this);
-                                return false;
+        function hookSubClassGrid(origFnName, tableSelector, getTargetGroup, submitFnName) {
+            const origFn = window[origFnName];
+            window[origFnName] = function (data, maLopMoSub) {
+                if (typeof origFn === 'function') {
+                    origFn(data, maLopMoSub);
+                }
+                setTimeout(() => {
+                    let $table = $(tableSelector);
+                    if ($table.length) {
+                        let $targetRow = null;
+                        let targetGroup = getTargetGroup();
+                        if (targetGroup) {
+                            $table.find('tbody tr').each(function () {
+                                let nhomText = $(this).find('td:eq(0)').text().trim();
+                                if (nhomText === targetGroup) {
+                                    $targetRow = $(this);
+                                    return false;
+                                }
+                            });
+                        }
+                        if (!$targetRow || !$targetRow.find('input[type="checkbox"]').length) {
+                            $table.find('tbody tr').each(function () {
+                                if ($(this).find('input[type="checkbox"]').length) {
+                                    $targetRow = $(this);
+                                    return false;
+                                }
+                            });
+                        }
+                        if ($targetRow && $targetRow.find('input[type="checkbox"]').length) {
+                            $targetRow.find('input[type="checkbox"]').prop('checked', true);
+                            if (typeof window[submitFnName] === 'function') {
+                                window[submitFnName]();
                             }
-                        });
-                    }
-                    if (!$targetRow || !$targetRow.find('input[type="checkbox"]').length) {
-                        $table.find('tbody tr').each(function () {
-                            if ($(this).find('input[type="checkbox"]').length) {
-                                $targetRow = $(this);
-                                return false;
-                            }
-                        });
-                    }
-                    if ($targetRow && $targetRow.find('input[type="checkbox"]').length) {
-                        $targetRow.find('input[type="checkbox"]').prop('checked', true);
-                        if (typeof window.dangKyThucHanh === 'function') {
-                            window.dangKyThucHanh();
                         }
                     }
-                }
-            }, 120);
-        };
+                }, 120);
+            };
+        }
 
-        // Hook BT Modal grid rendering for automatic BT selection & submission
-        const origShowGridBT = window.showGridLopMoBaiTap;
-        window.showGridLopMoBaiTap = function (data, maLopMoBT) {
-            if (typeof origShowGridBT === 'function') {
-                origShowGridBT(data, maLopMoBT);
-            }
-            setTimeout(() => {
-                let $table = $('#tbLopMoBaiTap');
-                if ($table.length) {
-                    let $targetRow = null;
-                    if (currentTargetBTGroup) {
-                        $table.find('tbody tr').each(function () {
-                            let nhomText = $(this).find('td:eq(0)').text().trim();
-                            if (nhomText === currentTargetBTGroup) {
-                                $targetRow = $(this);
-                                return false;
-                            }
-                        });
-                    }
-                    if (!$targetRow || !$targetRow.find('input[type="checkbox"]').length) {
-                        $table.find('tbody tr').each(function () {
-                            if ($(this).find('input[type="checkbox"]').length) {
-                                $targetRow = $(this);
-                                return false;
-                            }
-                        });
-                    }
-                    if ($targetRow && $targetRow.find('input[type="checkbox"]').length) {
-                        $targetRow.find('input[type="checkbox"]').prop('checked', true);
-                        if (typeof window.dangKyBaiTap === 'function') {
-                            window.dangKyBaiTap();
-                        }
-                    }
-                }
-            }, 120);
-        };
+        // Hook TH & BT Modal grid rendering for automatic selection & submission
+        hookSubClassGrid('showGridLopMoThucHanh', '#tbLopMoThucHanh', () => currentTargetTHGroup, 'dangKyThucHanh');
+        hookSubClassGrid('showGridLopMoBaiTap', '#tbLopMoBaiTap', () => currentTargetBTGroup, 'dangKyBaiTap');
 
         let matchedCount = 0;
         let checkedSummaryList = [];

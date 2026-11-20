@@ -173,6 +173,40 @@
             }
         }
 
+        applyRowColors() {
+            const state = this.state;
+            let allTrs = state.tab.find('tbody tr');
+            for (let i = 0; i < allTrs.length; i++) {
+                let idAttr = $(allTrs[i]).attr("id");
+                let item = state.data.find(d => String(d.id) === String(idAttr));
+                if (!item) continue;
+
+                let rowEl = $(allTrs[i]);
+                let childEls = rowEl.find('td, a, input, textarea');
+
+                if (!item.include) {
+                    if (item.whyExclude.includes("không tính")) {
+                        rowEl.css({ "color": "blue", "text-decoration": "line-through" });
+                        childEls.css({ "color": "blue", "text-decoration": "line-through" });
+                    } else if (item.whyExclude.includes("bỏ chọn")) {
+                        rowEl.css({ "color": "grey", "text-decoration": "line-through" });
+                        childEls.css({ "color": "grey", "text-decoration": "line-through" });
+                    } else {
+                        rowEl.css({ "color": "red", "text-decoration": "line-through" });
+                        childEls.css({ "color": "red", "text-decoration": "line-through" });
+                    }
+                } else {
+                    if (item.isCustom || item.wasNoScore || item.isEdited || item.whyExclude !== "") {
+                        rowEl.css({ "color": "blue", "text-decoration": "none" });
+                        childEls.css({ "color": "blue", "text-decoration": "none" });
+                    } else {
+                        rowEl.css({ "color": "", "text-decoration": "" });
+                        childEls.css({ "color": "", "text-decoration": "" });
+                    }
+                }
+            }
+        }
+
         formatCoursesTableAndCreateResultTable() {
             const { getDegreeInfo, toFixed, isAllSemestersMode, isCourseInSemesterGpaScope } = __HCMUS__.gpa.helpers;
             const { getSemesterData, drawGpaChartCanvas } = __HCMUS__.gpa.chart;
@@ -210,7 +244,6 @@
             }
 
             let targetSectionHtml = '';
-            let noteTextHtml = '';
 
             if (isAllSemestersMode()) {
                 let currentTargetCredits = $('#targetCreditsInput').val() || "138";
@@ -312,36 +345,7 @@
                 $('#targetDegreeSelectLabel').text('Mục tiêu năm học:');
             }
 
-            let allTrs = state.tab.find('tbody tr');
-            for (let i = 0; i < allTrs.length; i++) {
-                let idAttr = $(allTrs[i]).attr("id");
-                let item = state.data.find(d => String(d.id) === String(idAttr));
-                if (!item) continue;
-
-                let rowEl = $(allTrs[i]);
-                let childEls = rowEl.find('td, a, input, textarea');
-
-                if (!item.include) {
-                    if (item.whyExclude.includes("không tính")) {
-                        rowEl.css({ "color": "blue", "text-decoration": "line-through" });
-                        childEls.css({ "color": "blue", "text-decoration": "line-through" });
-                    } else if (item.whyExclude.includes("bỏ chọn")) {
-                        rowEl.css({ "color": "grey", "text-decoration": "line-through" });
-                        childEls.css({ "color": "grey", "text-decoration": "line-through" });
-                    } else {
-                        rowEl.css({ "color": "red", "text-decoration": "line-through" });
-                        childEls.css({ "color": "red", "text-decoration": "line-through" });
-                    }
-                } else {
-                    if (item.isCustom || item.wasNoScore || item.isEdited || item.whyExclude !== "") {
-                        rowEl.css({ "color": "blue", "text-decoration": "none" });
-                        childEls.css({ "color": "blue", "text-decoration": "none" });
-                    } else {
-                        rowEl.css({ "color": "", "text-decoration": "" });
-                        childEls.css({ "color": "", "text-decoration": "" });
-                    }
-                }
-            }
+            this.applyRowColors();
 
             if (isAllSemestersMode()) {
                 applyYearFilterVisibility(state);
@@ -417,33 +421,7 @@
             }
 
             // Update row colors in main courses table
-            let allTrs = state.tab.find('tbody tr');
-            for (let i = 0; i < allTrs.length; i++) {
-                let idAttr = $(allTrs[i]).attr("id");
-                let item = state.data.find(d => String(d.id) === String(idAttr));
-                if (!item) continue;
-
-                let rowEl = $(allTrs[i]);
-                let childEls = rowEl.find('td, a, input, textarea');
-
-                if (!item.include) {
-                    if (item.whyExclude.includes("không tính")) {
-                        rowEl.css({ "color": "blue", "text-decoration": "line-through" });
-                        childEls.css({ "color": "blue", "text-decoration": "line-through" });
-                    } else {
-                        rowEl.css({ "color": "red", "text-decoration": "line-through" });
-                        childEls.css({ "color": "red", "text-decoration": "line-through" });
-                    }
-                } else {
-                    if (item.isCustom || item.wasNoScore || item.isEdited) {
-                        rowEl.css({ "color": "blue", "text-decoration": "none" });
-                        childEls.css({ "color": "blue", "text-decoration": "none" });
-                    } else {
-                        rowEl.css({ "color": "", "text-decoration": "" });
-                        childEls.css({ "color": "", "text-decoration": "" });
-                    }
-                }
-            }
+            this.applyRowColors();
 
             if (isAllSemestersMode()) {
                 applyYearFilterVisibility(state);

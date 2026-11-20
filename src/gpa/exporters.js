@@ -1,6 +1,50 @@
 (function () {
     __HCMUS__.gpa = __HCMUS__.gpa || {};
 
+    function getExportContext(state) {
+        const { isCourseInSelectedYears, getDegreeInfo, isAllSemestersMode, getSelectedYearAndHk } = __HCMUS__.gpa.helpers;
+        let exportCal = state.cal;
+        if (!exportCal) return null;
+
+        let exportData = state.data.filter(d => isCourseInSelectedYears(state, d));
+
+        let rawUserText = $('#user_tools span').text() || $('#user_tools').text() || "";
+        let studentName = "Sinh viên";
+        if (rawUserText.includes("Xin chào")) {
+            let match = rawUserText.match(/Xin\s+chào\s+([^|]+)/i);
+            if (match && match[1]) {
+                studentName = match[1].trim();
+            }
+        }
+
+        let degInfo = getDegreeInfo(exportCal.gpa);
+        const now = new Date();
+        const dateStr = 'Ngày ' + now.getDate() + ' tháng ' + (now.getMonth() + 1) + ' năm ' + now.getFullYear();
+
+        let scopeText = "Tất cả";
+        if (!isAllSemestersMode()) {
+            let { year: yearInput, hk: hkInput } = getSelectedYearAndHk();
+            scopeText = "Học kỳ " + hkInput + " - Năm học " + yearInput;
+        } else if (state.selectedAcademicYears && state.selectedAcademicYears.length > 0) {
+            scopeText = "Năm học " + state.selectedAcademicYears.join(', ');
+        }
+
+        return { exportData, exportCal, studentName, degInfo, dateStr, scopeText };
+    }
+
+    function formatExportRow(row) {
+        const { toFixed } = __HCMUS__.gpa.helpers;
+        let scoreVal = (row.score > 0 || (!row.isAbsent && !row.isNoScore)) ? toFixed(row.score) : "-";
+        let letterVal = row.letter || "-";
+        let fourVal = row.fourRounding ? toFixed(row.fourRounding) : "-";
+
+        let courseParts = row.course.split(' - ');
+        let courseCode = courseParts.length > 1 ? courseParts[0].trim() : (row.ldcode || '');
+        let courseName = courseParts.length > 1 ? courseParts.slice(1).join(' - ').trim() : row.course;
+
+        return { scoreVal, letterVal, fourVal, courseCode, courseName };
+    }
+
     class ExportPdf {
         constructor(state) {
             this.state = state;
@@ -8,46 +52,16 @@
 
         exportToPdf() {
             const { LOGO_BASE64 } = __HCMUS__.constants;
-            const { isCourseInSelectedYears, getDegreeInfo, isAllSemestersMode, toFixed } = __HCMUS__.gpa.helpers;
-            const state = this.state;
-
-            let exportData = state.data.filter(d => isCourseInSelectedYears(state, d));
-            let exportCal = state.cal;
-            if (!exportCal) return;
-
-            let rawUserText = $('#user_tools span').text() || $('#user_tools').text() || "";
-            let studentName = "TRÀ VĂN SỸ";
-            if (rawUserText.includes("Xin chào")) {
-                let match = rawUserText.match(/Xin\s+chào\s+([^|]+)/i);
-                if (match && match[1]) {
-                    studentName = match[1].trim();
-                }
-            }
-
-            let degInfo = getDegreeInfo(exportCal.gpa);
-            const now = new Date();
-            const dateStr = 'Ngày ' + now.getDate() + ' tháng ' + (now.getMonth() + 1) + ' năm ' + now.getFullYear();
-
-            let scopeText = "Tất cả";
-            if (!isAllSemestersMode()) {
-                let yearInput = ($('#ctl00_ContentPlaceHolder1_ctl00_cboNamHoc_gvDKHPLichThi_ob_CbocboNamHoc_gvDKHPLichThiTB').val() || "").trim();
-                let hkInput = ($('#ctl00_ContentPlaceHolder1_ctl00_cboHocKy_gvDKHPLichThi_ob_CbocboHocKy_gvDKHPLichThiTB').val() || "").trim();
-                scopeText = "Học kỳ " + hkInput + " - Năm học " + yearInput;
-            } else if (state.selectedAcademicYears && state.selectedAcademicYears.length > 0) {
-                scopeText = "Năm học " + state.selectedAcademicYears.join(', ');
-            }
+            const { toFixed } = __HCMUS__.gpa.helpers;
+            const ctx = getExportContext(this.state);
+            if (!ctx) return;
+            const { exportData, exportCal, studentName, degInfo, dateStr, scopeText } = ctx;
 
             let rowsHtml = '';
             let stt = 1;
             exportData.forEach(function (row) {
                 if (row.include) {
-                    let scoreVal = (row.score > 0 || (!row.isAbsent && !row.isNoScore)) ? toFixed(row.score) : "-";
-                    let letterVal = row.letter || "-";
-                    let fourVal = row.fourRounding ? toFixed(row.fourRounding) : "-";
-
-                    let courseParts = row.course.split(' - ');
-                    let courseCode = courseParts.length > 1 ? courseParts[0].trim() : (row.ldcode || '');
-                    let courseName = courseParts.length > 1 ? courseParts.slice(1).join(' - ').trim() : row.course;
+                    const { scoreVal, letterVal, fourVal, courseCode, courseName } = formatExportRow(row);
 
                     rowsHtml += '<tr>' +
                         '<td>' + stt++ + '</td>' +
@@ -146,46 +160,16 @@
         }
 
         saveToFileCSV() {
-            const { isCourseInSelectedYears, getDegreeInfo, isAllSemestersMode, toFixed } = __HCMUS__.gpa.helpers;
-            const state = this.state;
-
-            let exportData = state.data.filter(d => isCourseInSelectedYears(state, d));
-            let exportCal = state.cal;
-            if (!exportCal) return;
-
-            let rawUserText = $('#user_tools span').text() || $('#user_tools').text() || "";
-            let studentName = "TRÀ VĂN SỸ";
-            if (rawUserText.includes("Xin chào")) {
-                let match = rawUserText.match(/Xin\s+chào\s+([^|]+)/i);
-                if (match && match[1]) {
-                    studentName = match[1].trim();
-                }
-            }
-
-            let degInfo = getDegreeInfo(exportCal.gpa);
-            const now = new Date();
-            const dateStr = 'Ngày ' + now.getDate() + ' tháng ' + (now.getMonth() + 1) + ' năm ' + now.getFullYear();
-
-            let scopeText = "Tất cả";
-            if (!isAllSemestersMode()) {
-                let yearInput = ($('#ctl00_ContentPlaceHolder1_ctl00_cboNamHoc_gvDKHPLichThi_ob_CbocboNamHoc_gvDKHPLichThiTB').val() || "").trim();
-                let hkInput = ($('#ctl00_ContentPlaceHolder1_ctl00_cboHocKy_gvDKHPLichThi_ob_CbocboHocKy_gvDKHPLichThiTB').val() || "").trim();
-                scopeText = "Học kỳ " + hkInput + " - Năm học " + yearInput;
-            } else if (state.selectedAcademicYears && state.selectedAcademicYears.length > 0) {
-                scopeText = "Năm học " + state.selectedAcademicYears.join(', ');
-            }
+            const { toFixed } = __HCMUS__.gpa.helpers;
+            const ctx = getExportContext(this.state);
+            if (!ctx) return;
+            const { exportData, exportCal, studentName, degInfo, dateStr, scopeText } = ctx;
 
             let rowsHtml = '';
             let stt = 1;
             exportData.forEach(function (row) {
                 if (row.include) {
-                    let scoreVal = (row.score > 0 || (!row.isAbsent && !row.isNoScore)) ? toFixed(row.score) : "-";
-                    let letterVal = row.letter || "-";
-                    let fourVal = row.fourRounding ? toFixed(row.fourRounding) : "-";
-
-                    let courseParts = row.course.split(' - ');
-                    let courseCode = courseParts.length > 1 ? courseParts[0].trim() : (row.ldcode || '');
-                    let courseName = courseParts.length > 1 ? courseParts.slice(1).join(' - ').trim() : row.course;
+                    const { scoreVal, letterVal, fourVal, courseCode, courseName } = formatExportRow(row);
 
                     rowsHtml += '<tr height="40" style="height: 40px;">' +
                         '<td></td>' +

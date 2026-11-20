@@ -3,16 +3,6 @@
 
     function initUserCourseData(state) {
         const { isExceptCourseName, isCustomCourseInScope } = __HCMUS__.gpa.helpers;
-        const exceptCourses = [
-            "Anh văn",
-            "Giáo dục quốc phòng",
-            "Thể dục",
-            "Tin học cơ sở",
-            "Tin hoc co so",
-            "Anh van",
-            "Giao duc quoc phong",
-            "The duc"
-        ];
 
         state.rows = state.tab.find("tbody tr").not(".gpa-custom-row");
         state.data = [];
@@ -273,7 +263,7 @@
             let trHtml = '<tr class="odd gpa-custom-row" id="' + item.id + '" style="' + trStyle + '">' +
                 '<td class="center gpa-checkbox" style="width:60px;"><input type="checkbox"' + (inc ? " checked" : "") + ' /><div hidden>' + (inc ? 1 : 0) + '</div></td>' +
                 '<td class="center" style="width: 80px;"><span style="display:none;">' + semVal + '_z</span><input type="text" class="gpa-custom-sem-input" data-id="' + item.id + '" value="' + semVal + '" placeholder="-" style="width: 65px; text-align: center; border: 1px solid #c0c0c0; background: transparent; color: inherit; font-family: inherit; font-size: inherit; padding: 1px 2px;" /></td>' +
-                '<td class="left" style="padding: 2px 4px; vertical-align: middle;"><textarea class="gpa-custom-name-input" data-id="' + item.id + '" placeholder="-" title="' + nameVal + '" style="width: 100%; min-width: 100%; height: 26px; resize: none; border: 1px solid #c0c0c0; background: transparent; color: inherit; font-family: inherit; font-size: inherit; padding: 2px 4px; box-sizing: border-box; vertical-align: middle; overflow: hidden; line-height: 1.3;" rows="1">' + nameVal + '</textarea></td>' +
+                '<td class="left" style="padding: 2px 4px; vertical-align: middle;"><textarea class="gpa-custom-name-input" data-id="' + item.id + '" placeholder="-" title="' + nameVal.replace(/"/g, '&quot;') + '" style="width: 100%; min-width: 100%; height: 26px; resize: none; border: 1px solid #c0c0c0; background: transparent; color: inherit; font-family: inherit; font-size: inherit; padding: 2px 4px; box-sizing: border-box; vertical-align: middle; overflow: hidden; line-height: 1.3;" rows="1">' + nameVal + '</textarea></td>' +
                 '<td class="center" style="width: 60px;"><input type="text" class="gpa-custom-credit-input" data-id="' + item.id + '" value="' + creditVal + '" placeholder="-" style="width: 45px; text-align: center; border: 1px solid #c0c0c0; background: transparent; color: inherit; font-family: inherit; font-size: inherit; padding: 1px 2px;" /></td>' +
                 '<td class="center" style="width: 60px;">DK</td>' +
                 '<td class="center" style="width: 60px;"></td>' +

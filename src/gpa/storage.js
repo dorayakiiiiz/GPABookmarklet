@@ -28,7 +28,7 @@
     }
 
     function saveGpaSimulationData(state) {
-        const { getSelectedYearAndHk, isAllSemestersMode, isCustomCourseInScope } = __HCMUS__.gpa.helpers;
+        const { isAllSemestersMode, isCustomCourseInScope } = __HCMUS__.gpa.helpers;
         if (!window._gpaIsUserEditingOrRestored) {
             return;
         }
@@ -36,9 +36,6 @@
             if (window._gpaCustomCoursesList && window._gpaCustomCoursesList.length > 0) {
                 let existingRaw = localStorage.getItem('gpa_saved_custom_courses');
                 let existingCustom = existingRaw ? JSON.parse(existingRaw) : [];
-
-                let { year, hk } = getSelectedYearAndHk();
-                let targetSem = (year + '/' + hk).toLowerCase();
 
                 let otherSemCustom = existingCustom.filter(c => {
                     if (!c) return false;
@@ -76,7 +73,6 @@
                     let originalScoreStr = (serverAttr && serverAttr !== 'null') ? serverAttr : "";
 
                     let isChanged = scoreVal !== "" && (item.isEdited || item.wasNoScore || scoreVal !== originalScoreStr);
-                    let isBlankEdit = scoreVal === "" && (item.isEdited || item.wasNoScore);
 
                     if (isChanged) {
                         savedScores[rowKey] = scoreVal;
@@ -84,7 +80,6 @@
                         // Score reverted to original or cleared → mark for removal
                         revertedKeys.push(rowKey);
                     }
-                    _ = isBlankEdit; // suppress unused var warning
                 }
             });
 

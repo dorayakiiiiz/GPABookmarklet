@@ -1,8 +1,14 @@
-(function tkbModule() {
+(function () {
     window._initTimetablePlanner = function () {
-        const { PORTAL_HOST_REG, COURSE_PALETTES } = __HCMUS__.constants;
+        const { PORTAL_HOST_REG, PORTAL_LAYOUT_FIX_CSS, COURSE_PALETTES } = __HCMUS__.constants;
         const { parseSchedule, getCampus, getScheduleMinutes, minutesToHHMM } = __HCMUS__.schedule;
-        const { renderShiftViewBody, renderPeriodViewBody } = __HCMUS__.timetableGrid;
+        const {
+            analyzeCampusAndShiftMode,
+            getShiftCardMeta,
+            buildSessionDefinitions,
+            renderShiftViewBody,
+            renderPeriodViewBody
+        } = __HCMUS__.timetableGrid;
         const { saveTkbToLocalStorage, loadTkbFromLocalStorage, clearTkbFromLocalStorage, hasRestorableTkbData } = __HCMUS__.tkbStorage;
         const { getThucHanhShifts, getBaiTapShifts, showSubClassModal } = __HCMUS__.tkbSubClass;
         const { injectFilterBar } = __HCMUS__.tkbFilter;
@@ -22,7 +28,7 @@
         if (!tab.length) return;
 
         // Fix layout widths & Add custom styles for selection rows & hide Obout button overlay glitch
-        $('<style>#page-body{display:flex!important;align-items:stretch!important}#page-body-menu{height:auto!important;min-height:100%!important;flex-shrink:0!important}#page-body-content{flex-grow:1!important;min-width:0!important}#tbPDTKQ{width:100%!important;margin:0!important}.tkb-selected-row{background-color:#e0f2fe!important}.ob_iBOv{display:none!important}</style>').appendTo('head');
+        $('<style>' + PORTAL_LAYOUT_FIX_CSS + '#tbPDTKQ{width:100%!important;margin:0!important}.tkb-selected-row{background-color:#e0f2fe!important}.ob_iBOv{display:none!important}</style>').appendTo('head');
 
         // Storage for selected classes (per semester)
         window._gpaSelectedClasses = {};
@@ -112,14 +118,24 @@
             });
         }
 
+        function forEachTkbRowById(id, cb) {
+            $('#tbPDTKQ tbody tr').each(function () {
+                if ($(this).attr('data-tkb-id') === id) {
+                    cb($(this));
+                }
+            });
+        }
+
         // Re-inject checkboxes & highlights on DataTables sort/redraw
         $(document).off('draw.dt sort.dt', '#tbPDTKQ');
         $(document).on('draw.dt sort.dt', '#tbPDTKQ', function () {
             injectCheckboxes();
             let selectedList = Object.values(window._gpaSelectedClasses || {});
             selectedList.forEach(item => {
-                $(`#tbPDTKQ tbody tr[data-tkb-id="${item.id}"]`).addClass('tkb-selected-row');
-                $(`#tbPDTKQ tbody tr[data-tkb-id="${item.id}"] .tkb-class-cb`).prop('checked', true);
+                forEachTkbRowById(item.id, function ($row) {
+                    $row.addClass('tkb-selected-row');
+                    $row.find('.tkb-class-cb').prop('checked', true);
+                });
             });
         });
 
@@ -176,7 +192,6 @@
 
             $(document).off('change', '#gpaTkbShiftViewCb');
             $(document).on('change', '#gpaTkbShiftViewCb', function () {
-                window._gpaTkbShiftViewManual = true;
                 window._gpaTkbShiftView = $(this).is(':checked');
                 renderTkbPanel();
             });
@@ -200,7 +215,9 @@
 
             selectedList.forEach(item => {
                 totalCredits += item.credit;
-                $(`#tbPDTKQ tbody tr[data-tkb-id="${item.id}"]`).addClass('tkb-selected-row');
+                forEachTkbRowById(item.id, function ($row) {
+                    $row.addClass('tkb-selected-row');
+                });
             });
 
             // Update summary text with bolding after colon
@@ -208,42 +225,10 @@
             $('#gpaTkbTotalCredits').text(totalCredits + ' TC');
 
             // Detect if selected classes contain both CS1 and CS2
-            let campusSet = new Set();
-            let dayP6Map = {};
-            selectedList.forEach(item => {
-                let scheds = getAllSchedules(item);
-                scheds.forEach(s => {
-                    let campus = getCampus(s, item);
-                    campusSet.add(campus);
-
-                    let d = s.dayNum;
-                    if (!dayP6Map[d]) dayP6Map[d] = { cs1: false, cs2: false };
-                    if (campus === 'cs1' && s.startPeriod <= 6 && s.endPeriod >= 6) {
-                        dayP6Map[d].cs1 = true;
-                    }
-                    if (campus === 'cs2' && s.startPeriod <= 6 && s.endPeriod >= 6) {
-                        dayP6Map[d].cs2 = true;
-                    }
-                });
-            });
-
-            let isMixedCampus = campusSet.has('cs1') && campusSet.has('cs2');
-            let isP6Overlap = false;
-            for (let d in dayP6Map) {
-                if (dayP6Map[d].cs1 && dayP6Map[d].cs2) {
-                    isP6Overlap = true;
-                    break;
-                }
-            }
-
-            // Auto-switch to Shift View ONLY when transitioning into a NEW Period 6 overlap
-            if (!window._hadP6Overlap && isP6Overlap) {
-                window._gpaTkbShiftView = true;
-            }
-
-            window._hadP6Overlap = isP6Overlap;
-
-            let isShiftView = !!window._gpaTkbShiftView;
+            const { campusSet, isMixedCampus, isShiftView } = analyzeCampusAndShiftMode(
+                selectedList,
+                getAllSchedules
+            );
 
             // Sync checkbox checked property in DOM
             $('#gpaTkbShiftViewCb').prop('checked', isShiftView);
@@ -274,21 +259,8 @@
                     function addSessionCard(s, typeTag) {
                         if (s.dayNum < 2 || s.dayNum > 7) return;
                         let campus = getCampus(s, item);
-                        let time = getScheduleMinutes(s, campus);
-                        let sessionKey = 'morning';
-                        if (time.startMin >= 1080) {
-                            sessionKey = 'evening';
-                            hasEveningClass = true;
-                        } else if (time.startMin >= 750) {
-                            sessionKey = 'afternoon';
-                        }
-
-                        let periodSpan = Math.max(1, (s.endPeriod - s.startPeriod + 1));
-                        let isHalf = periodSpan <= 3.5;
-                        let midPeriod = (campus === 'cs1')
-                            ? (sessionKey === 'morning' ? 3.5 : (sessionKey === 'afternoon' ? 9.5 : 14.5))
-                            : (sessionKey === 'morning' ? 3 : (sessionKey === 'afternoon' ? 8 : 13));
-                        let isBottomHalf = s.startPeriod >= midPeriod;
+                        let { time, sessionKey, isHalf, isBottomHalf } = getShiftCardMeta(s, campus);
+                        if (sessionKey === 'evening') hasEveningClass = true;
 
                         sessionMap[s.dayNum][sessionKey].push({
                             courseName: item.courseName + typeTag,
@@ -322,30 +294,7 @@
                     }
                 });
 
-                let hasCS1 = campusSet.has('cs1');
-                let hasCS2 = campusSet.has('cs2');
-
-                let morningRange = '07g30 - 11g50';
-                let afternoonRange = '12g40 - 17g00';
-                let eveningRange = '17g30 - 20g00';
-
-                if (hasCS1 && hasCS2) {
-                    morningRange = '07g00 - 12g10';
-                    afternoonRange = '12g40 - 18g00';
-                    eveningRange = '17g30 - 20g30';
-                } else if (hasCS1) {
-                    morningRange = '07g00 - 12g10';
-                    afternoonRange = '12g50 - 18g00';
-                    eveningRange = '18g00 - 20g30';
-                }
-
-                let sessions = [
-                    { key: 'morning', label: 'Buổi sáng', timeLabel: morningRange },
-                    { key: 'afternoon', label: 'Buổi chiều', timeLabel: afternoonRange }
-                ];
-                if (hasEveningClass) {
-                    sessions.push({ key: 'evening', label: 'Buổi Tối', timeLabel: eveningRange });
-                }
+                let sessions = buildSessionDefinitions(campusSet, hasEveningClass);
 
                 tbodyHtml = renderShiftViewBody({
                     sessionMap,
@@ -372,88 +321,34 @@
                         let palette = courseColorMap[key] || COURSE_PALETTES[0];
                         let hasSub = item.hasTH || item.hasBT || !!(item.selectedTH && item.selectedTH.scheduleStr) || !!(item.selectedBT && item.selectedBT.scheduleStr);
 
-                        // 1. Lecture Schedule
-                        let schedules = parseSchedule(item.scheduleStr);
-                        schedules.forEach(s => {
-                            if (s.dayNum === d) {
-                                let campus = getCampus(s, item);
-                                let start = Math.max(1, Math.floor(s.startPeriod));
-                                let end = Math.min(maxPeriods, Math.floor(s.endPeriod));
+                        getAllSchedules(item).forEach(s => {
+                            if (s.dayNum !== d) return;
+                            let campus = getCampus(s, item);
+                            let start = Math.max(1, Math.floor(s.startPeriod));
+                            let end = Math.min(maxPeriods, Math.floor(s.endPeriod));
 
-                                if (hasCS1 && campus === 'cs2' && s.startPeriod <= 6 && s.endPeriod >= 6) {
-                                    start = 7;
-                                    end = Math.min(maxPeriods, Math.floor(s.endPeriod) + 1);
-                                }
-
-                                dayItems.push({
-                                    start: start,
-                                    end: end,
-                                    courseName: item.courseName + (hasSub ? ' [LT]' : ''),
-                                    className: item.className,
-                                    room: s.room,
-                                    campus: campus,
-                                    palette: palette
-                                });
+                            if (hasCS1 && campus === 'cs2' && s.startPeriod <= 6 && s.endPeriod >= 6) {
+                                start = 7;
+                                end = Math.min(maxPeriods, Math.floor(s.endPeriod) + 1);
                             }
+
+                            let courseLabel = s.isTH
+                                ? item.courseName + ' [TH]'
+                                : (s.isBT ? item.courseName + ' [BT]' : item.courseName + (hasSub ? ' [LT]' : ''));
+                            let classLabel = s.isTH
+                                ? (item.selectedTH.nhom || item.className)
+                                : (s.isBT ? (item.selectedBT.nhom || item.className) : item.className);
+
+                            dayItems.push({
+                                start: start,
+                                end: end,
+                                courseName: courseLabel,
+                                className: classLabel,
+                                room: s.room,
+                                campus: campus,
+                                palette: palette
+                            });
                         });
-
-                        // 2. Practical
-                        if (item.selectedTH && item.selectedTH.scheduleStr) {
-                            let thSchedules = parseSchedule(item.selectedTH.scheduleStr);
-                            thSchedules.forEach(sTH => {
-                                sTH.isTH = true;
-                                sTH.subDiaDiem = item.selectedTH.diaDiem;
-                                if (sTH.dayNum === d) {
-                                    let campusTH = getCampus(sTH, item);
-                                    let start = Math.max(1, Math.floor(sTH.startPeriod));
-                                    let end = Math.min(maxPeriods, Math.floor(sTH.endPeriod));
-
-                                    if (hasCS1 && campusTH === 'cs2' && sTH.startPeriod <= 6 && sTH.endPeriod >= 6) {
-                                        start = 7;
-                                        end = Math.min(maxPeriods, Math.floor(sTH.endPeriod) + 1);
-                                    }
-
-                                    dayItems.push({
-                                        start: start,
-                                        end: end,
-                                        courseName: item.courseName + ' [TH]',
-                                        className: item.selectedTH.nhom || item.className,
-                                        room: sTH.room,
-                                        campus: campusTH,
-                                        palette: palette
-                                    });
-                                }
-                            });
-                        }
-
-                        // 3. Exercise
-                        if (item.selectedBT && item.selectedBT.scheduleStr) {
-                            let btSchedules = parseSchedule(item.selectedBT.scheduleStr);
-                            btSchedules.forEach(sBT => {
-                                sBT.isBT = true;
-                                sBT.subDiaDiem = item.selectedBT.diaDiem;
-                                if (sBT.dayNum === d) {
-                                    let campusBT = getCampus(sBT, item);
-                                    let start = Math.max(1, Math.floor(sBT.startPeriod));
-                                    let end = Math.min(maxPeriods, Math.floor(sBT.endPeriod));
-
-                                    if (hasCS1 && campusBT === 'cs2' && sBT.startPeriod <= 6 && sBT.endPeriod >= 6) {
-                                        start = 7;
-                                        end = Math.min(maxPeriods, Math.floor(sBT.endPeriod) + 1);
-                                    }
-
-                                    dayItems.push({
-                                        start: start,
-                                        end: end,
-                                        courseName: item.courseName + ' [BT]',
-                                        className: item.selectedBT.nhom || item.className,
-                                        room: sBT.room,
-                                        campus: campusBT,
-                                        palette: palette
-                                    });
-                                }
-                            });
-                        }
                     });
 
                     // Sort dayItems by start period ascending
@@ -527,6 +422,17 @@
             }
         }
 
+        function exceedsMaxCredits(courseName, credit) {
+            let selectedList = Object.values(window._gpaSelectedClasses);
+            let currentTotal = selectedList.reduce((sum, item) => sum + (item.credit || 0), 0);
+            let addCredit = credit || 0;
+            if (currentTotal + addCredit > 25) {
+                alert(`Không thể chọn môn này!\n\nSố tín chỉ đã chọn hiện tại: ${currentTotal} TC.\nMôn vừa chọn (${courseName}) có ${addCredit} TC.\n\nNếu chọn thêm sẽ thành ${currentTotal + addCredit} TC, vượt quá giới hạn tối đa 25 tín chỉ cho phép trong một học kỳ!`);
+                return true;
+            }
+            return false;
+        }
+
         $(document).off('change', '.tkb-class-cb');
         $(document).on('change', '.tkb-class-cb', function () {
             disableTkbRestoreBtn();
@@ -552,10 +458,7 @@
                 };
 
                 // Check max 25 credits limit
-                let currentSelectedList = Object.values(window._gpaSelectedClasses);
-                let currentTotalCredits = currentSelectedList.reduce((sum, item) => sum + (item.credit || 0), 0);
-                if (currentTotalCredits + newItem.credit > 25) {
-                    alert(`Không thể chọn môn này!\n\nSố tín chỉ đã chọn hiện tại: ${currentTotalCredits} TC.\nMôn vừa chọn (${newItem.courseName}) có ${newItem.credit} TC.\n\nNếu chọn thêm sẽ thành ${currentTotalCredits + newItem.credit} TC, vượt quá giới hạn tối đa 25 tín chỉ cho phép trong một học kỳ!`);
+                if (exceedsMaxCredits(newItem.courseName, newItem.credit)) {
                     cbEl.prop('checked', false);
                     return;
                 }
@@ -586,13 +489,11 @@
 
                 function processSelection(itemToSelect) {
                     // Check max 25 credits limit
-                    let selectedList = Object.values(window._gpaSelectedClasses);
-                    let totalCreds = selectedList.reduce((sum, item) => sum + (item.credit || 0), 0);
-                    if (totalCreds + (itemToSelect.credit || 0) > 25) {
-                        alert(`Không thể chọn môn này!\n\nSố tín chỉ đã chọn hiện tại: ${totalCreds} TC.\nMôn vừa chọn (${itemToSelect.courseName}) có ${itemToSelect.credit} TC.\n\nNếu chọn thêm sẽ thành ${totalCreds + itemToSelect.credit} TC, vượt quá giới hạn tối đa 25 tín chỉ cho phép trong một học kỳ!`);
+                    if (exceedsMaxCredits(itemToSelect.courseName, itemToSelect.credit)) {
                         cbEl.prop('checked', false);
                         return;
                     }
+                    let selectedList = Object.values(window._gpaSelectedClasses);
 
                     // Check conflict against currently selected classes
                     let conflicts = [];
@@ -723,8 +624,10 @@
             loadTkbFromLocalStorage();
             let selectedList = Object.values(window._gpaSelectedClasses || {});
             selectedList.forEach(item => {
-                $(`#tbPDTKQ tbody tr[data-tkb-id="${item.id}"]`).addClass('tkb-selected-row');
-                $(`#tbPDTKQ tbody tr[data-tkb-id="${item.id}"] .tkb-class-cb`).prop('checked', true);
+                forEachTkbRowById(item.id, function ($row) {
+                    $row.addClass('tkb-selected-row');
+                    $row.find('.tkb-class-cb').prop('checked', true);
+                });
             });
             renderTkbPanel();
             $(this).css({ 'opacity': '0.5', 'cursor': 'not-allowed', 'pointer-events': 'none' }).off('click').click(ev => ev.preventDefault());
